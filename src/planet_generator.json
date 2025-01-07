@@ -1,0 +1,24 @@
+{
+  "planet_stats": [
+    "lavaness",
+    "oceanness",
+    "swiss_cheese_planetness",
+    "deep_caves",
+    "caves",
+    "smooth",
+    "sandy",
+    "smelted",
+    "hot",
+    "wet",
+    "breathablity",
+    "squishyness",
+    "roughness",
+    "gravity",
+    "metal_rich",
+    "crystal_rich",
+    "pressure",
+    "rock_density",
+    "rock_cracks",
+    "core_size"
+  ]
+}
