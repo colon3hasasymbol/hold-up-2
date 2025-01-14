@@ -9,41 +9,6 @@ const c = @cImport({
 });
 
 pub const VulkanLibrary = struct {
-    // pub const Dispatch = struct {
-    //     DestroyInstance: std.meta.Child(c.PFN_vkDestroyInstance) = undefined,
-    //     EnumeratePhysicalDevices: std.meta.Child(c.PFN_vkEnumeratePhysicalDevices) = undefined,
-    //     GetPhysicalDeviceQueueFamilyProperties: std.meta.Child(c.PFN_vkGetPhysicalDeviceQueueFamilyProperties) = undefined,
-    //     CreateDevice: std.meta.Child(c.PFN_vkCreateDevice) = undefined,
-    //     GetDeviceProcAddr: std.meta.Child(c.PFN_vkGetDeviceProcAddr) = undefined,
-    //     DestroySurfaceKHR: std.meta.Child(c.PFN_vkDestroySurfaceKHR) = undefined,
-    //     GetPhysicalDeviceSurfaceSupportKHR: std.meta.Child(c.PFN_vkGetPhysicalDeviceSurfaceSupportKHR) = undefined,
-    //     GetPhysicalDeviceSurfaceCapabilitiesKHR: std.meta.Child(c.PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR) = undefined,
-    //     DestroyDevice: std.meta.Child(c.PFN_vkDestroyDevice) = undefined,
-    //     GetDeviceQueue: std.meta.Child(c.PFN_vkGetDeviceQueue) = undefined,
-    //     CreateImageView: std.meta.Child(c.PFN_vkCreateImageView) = undefined,
-    //     DestroyImageView: std.meta.Child(c.PFN_vkDestroyImageView) = undefined,
-    //     CreateShaderModule: std.meta.Child(c.PFN_vkCreateShaderModule) = undefined,
-    //     DestroyShaderModule: std.meta.Child(c.PFN_vkDestroyShaderModule) = undefined,
-    //     CreatePipelineLayout: std.meta.Child(c.PFN_vkCreatePipelineLayout) = undefined,
-    //     DestroyPipelineLayout: std.meta.Child(c.PFN_vkDestroyPipelineLayout) = undefined,
-    //     CreateRenderPass: std.meta.Child(c.PFN_vkCreateRenderPass) = undefined,
-    //     DestroyRenderPass: std.meta.Child(c.PFN_vkDestroyRenderPass) = undefined,
-    //     CreateGraphicsPipelines: std.meta.Child(c.PFN_vkCreateGraphicsPipelines) = undefined,
-    //     DestroyPipeline: std.meta.Child(c.PFN_vkDestroyPipeline) = undefined,
-    //     CreateSwapchainKHR: std.meta.Child(c.PFN_vkCreateSwapchainKHR) = undefined,
-    //     DestroySwapchainKHR: std.meta.Child(c.PFN_vkDestroySwapchainKHR) = undefined,
-    //     GetSwapchainImagesKHR: std.meta.Child(c.PFN_vkGetSwapchainImagesKHR) = undefined,
-    //     CreateFence: std.meta.Child(c.PFN_vkCreateFence) = undefined,
-    //     DestroyFence: std.meta.Child(c.PFN_vkDestroyFence) = undefined,
-    //     AcquireNextImageKHR: std.meta.Child(c.PFN_vkAcquireNextImageKHR) = undefined,
-    //     WaitForFences: std.meta.Child(c.PFN_vkWaitForFences) = undefined,
-    //     QueuePresentKHR: std.meta.Child(c.PFN_vkQueuePresentKHR) = undefined,
-    //     CreateSemaphore: std.meta.Child(c.PFN_vkCreateSemaphore) = undefined,
-    //     DestroySemaphore: std.meta.Child(c.PFN_vkDestroySemaphore) = undefined,
-    //     ResetFences: std.meta.Child(c.PFN_vkResetFences) = undefined,
-    //     GetPhysicalDeviceProperties: std.meta.Child(c.PFN_vkGetPhysicalDeviceProperties) = undefined,
-    // };
-
     get_instance_proc_addr: std.meta.Child(c.PFN_vkGetInstanceProcAddr),
 
     pub fn init() !@This() {
@@ -157,7 +122,8 @@ pub const VulkanInstance = struct {
             .ppEnabledExtensionNames = extensions.ptr,
         });
 
-        const create_instance = try vulkan_library.getProc(null, c.PFN_vkCreateInstance, "vkCreateInstance"); //@as(c.PFN_vkCreateInstance, @ptrCast(get_instance_proc_addr(null, "vkCreateInstance"))).?;
+        const create_instance = try vulkan_library.getProc(null, c.PFN_vkCreateInstance, "vkCreateInstance");
+
         var handle: c.VkInstance = undefined;
         if (create_instance(&create_info, allocation_callbacks, &handle) < 0) return error.VkCreateInstance;
 
@@ -306,6 +272,21 @@ const VulkanLogicalDevice = struct {
         CreateSwapchainKHR: std.meta.Child(c.PFN_vkCreateSwapchainKHR) = undefined,
         DestroySwapchainKHR: std.meta.Child(c.PFN_vkDestroySwapchainKHR) = undefined,
         GetSwapchainImagesKHR: std.meta.Child(c.PFN_vkGetSwapchainImagesKHR) = undefined,
+        CreateFence: std.meta.Child(c.PFN_vkCreateFence) = undefined,
+        DestroyFence: std.meta.Child(c.PFN_vkDestroyFence) = undefined,
+        CreateSemaphore: std.meta.Child(c.PFN_vkCreateSemaphore) = undefined,
+        DestroySemaphore: std.meta.Child(c.PFN_vkDestroySemaphore) = undefined,
+        AcquireNextImageKHR: std.meta.Child(c.PFN_vkAcquireNextImageKHR) = undefined,
+        QueuePresentKHR: std.meta.Child(c.PFN_vkQueuePresentKHR) = undefined,
+        WaitForFences: std.meta.Child(c.PFN_vkWaitForFences) = undefined,
+        ResetFences: std.meta.Child(c.PFN_vkResetFences) = undefined,
+        DeviceWaitIdle: std.meta.Child(c.PFN_vkDeviceWaitIdle) = undefined,
+        CreateCommandPool: std.meta.Child(c.PFN_vkCreateCommandPool) = undefined,
+        DestroyCommandPool: std.meta.Child(c.PFN_vkDestroyCommandPool) = undefined,
+        AllocateCommandBuffers: std.meta.Child(c.PFN_vkAllocateCommandBuffers) = undefined,
+        BeginCommandBuffer: std.meta.Child(c.PFN_vkBeginCommandBuffer) = undefined,
+        EndCommandBuffer: std.meta.Child(c.PFN_vkEndCommandBuffer) = undefined,
+        QueueSubmit: std.meta.Child(c.PFN_vkQueueSubmit) = undefined,
     };
 
     handle: c.VkDevice,
@@ -368,6 +349,37 @@ const VulkanLogicalDevice = struct {
         if (self.dispatch.CreateImageView(self.handle, &create_info, allocation_callbacks, &handle) < 0) return error.VkCreateImageView;
 
         return handle;
+    }
+
+    pub fn createFences(self: *const @This(), allocator: std.mem.Allocator, allocation_callbacks: ?*c.VkAllocationCallbacks) !VulkanFences {
+        return VulkanFences.init(self, allocator, allocation_callbacks);
+    }
+
+    pub fn createSemaphores(self: *const @This(), allocator: std.mem.Allocator, allocation_callbacks: ?*c.VkAllocationCallbacks) !VulkanSemaphores {
+        return VulkanSemaphores.init(self, allocator, allocation_callbacks);
+    }
+
+    pub fn waitIdle(self: *const @This()) !void {
+        if (self.dispatch.DeviceWaitIdle(self.handle) < 0) return error.VkDeviceWaitIdle;
+    }
+
+    pub fn createCommandPool(self: *const @This(), allocator: std.mem.Allocator, allocation_callbacks: ?*c.VkAllocationCallbacks) !VulkanCommandPool {
+        return VulkanCommandPool.init(self, allocator, allocation_callbacks);
+    }
+
+    pub fn queueSubmit(self: *@This(), command_buffers: []VulkanCommandBuffer, fence: c.VkFence, semaphores: *VulkanSemaphores) !void {
+        const flag: u32 = @intCast(c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
+
+        const submit_info = std.mem.zeroInit(c.VkSubmitInfo, c.VkSubmitInfo{
+            .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .commandBufferCount = @intCast(command_buffers.len),
+            .pCommandBuffers = @ptrCast(command_buffers.ptr),
+            .waitSemaphoreCount = @intCast(semaphores.handles.items.len),
+            .pWaitSemaphores = semaphores.handles.items.ptr,
+            .pWaitDstStageMask = &flag,
+        });
+
+        if (self.dispatch.QueueSubmit(self.queue, 1, &submit_info, fence) < 0) return error.VkQueueSubmit;
     }
 };
 
@@ -456,25 +468,167 @@ const VulkanSwapchain = struct {
         }
         self.allocator.free(self.views);
     }
+
+    pub fn acquireNextImage(self: *@This(), timeout_nanoseconds: ?u64, semaphore: c.VkSemaphore, fence: c.VkFence) !u32 {
+        var result: u32 = undefined;
+        if (self.device.dispatch.AcquireNextImageKHR(self.device.handle, self.handle, timeout_nanoseconds orelse std.math.maxInt(u64), semaphore, fence, &result) < 0) return error.VkAcquireNextImage;
+
+        return result;
+    }
+
+    pub fn present(self: *@This(), semaphores: *VulkanSemaphores, fences: *VulkanFences, index: u32) !void {
+        _ = fences;
+
+        const present_info = std.mem.zeroInit(c.VkPresentInfoKHR, c.VkPresentInfoKHR{
+            .sType = c.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+            .waitSemaphoreCount = @as(u32, @intCast(semaphores.handles.items.len)),
+            .pWaitSemaphores = semaphores.handles.items.ptr,
+            .swapchainCount = 1,
+            .pSwapchains = &self.handle,
+            .pImageIndices = &index,
+        });
+
+        if (self.device.dispatch.QueuePresentKHR(self.device.queue, &present_info) < 0) return error.VkQueuePresent;
+    }
 };
 
-// const VulkanFences = struct {
-//     handles: std.ArrayList(c.VkFence),
-//     allocation_callbacks: ?*c.VkAllocationCallbacks,
-//     allocator: std.mem.Allocator,
-//     device: *VulkanLogicalDevice,
+const VulkanFences = struct {
+    handles: std.ArrayList(c.VkFence),
+    allocator: std.mem.Allocator,
+    device: *const VulkanLogicalDevice,
+    allocation_callbacks: ?*c.VkAllocationCallbacks,
 
-//     pub fn deinit(self: *@This()) void {
-//         for (self.handles.items) |handle| {
-//             self.device.physical_device.instance.vulkan_library.dispatch.DestroyFence(self.device.handle, handle, self.allocation_callbacks);
-//         }
-//         self.handles.deinit();
-//     }
+    pub fn init(device: *const VulkanLogicalDevice, allocator: std.mem.Allocator, allocation_callbacks: ?*c.VkAllocationCallbacks) !@This() {
+        return .{
+            .handles = std.ArrayList(c.VkFence).init(allocator),
+            .allocator = allocator,
+            .device = device,
+            .allocation_callbacks = allocation_callbacks,
+        };
+    }
 
-//     pub fn wait(self: *const @This()) !void {
-//         if (self.device.physical_device.instance.vulkan_library.dispatch.WaitForFences(self.device.handle, self.handles.items.len, ))
-//     }
-// };
+    pub fn deinit(self: *@This()) void {
+        for (self.handles.items) |handle| {
+            self.device.dispatch.DestroyFence(self.device.handle, handle, self.allocation_callbacks);
+        }
+        self.handles.deinit();
+    }
+
+    pub fn addFence(self: *@This(), signaled: bool, allocation_callbacks: ?*c.VkAllocationCallbacks) !void {
+        const create_info = std.mem.zeroInit(c.VkFenceCreateInfo, c.VkFenceCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+            .flags = if (signaled) c.VK_FENCE_CREATE_SIGNALED_BIT else 0,
+        });
+
+        var handle: c.VkFence = undefined;
+        if (self.device.dispatch.CreateFence(self.device.handle, &create_info, allocation_callbacks, &handle) < 0) return error.VkCreateFence;
+
+        try self.handles.append(handle);
+    }
+
+    pub fn wait(self: *const @This(), for_all: bool, timeout_nanoseconds: ?u64) !void {
+        if (self.device.dispatch.WaitForFences(self.device.handle, @as(u32, @intCast(self.handles.items.len)), self.handles.items.ptr, @intFromBool(for_all), timeout_nanoseconds orelse std.math.maxInt(u64)) < 0) return error.VkWaitForFences;
+    }
+
+    pub fn reset(self: *@This()) !void {
+        if (self.device.dispatch.ResetFences(self.device.handle, @as(u32, @intCast(self.handles.items.len)), self.handles.items.ptr) < 0) return error.VkResetFences;
+    }
+};
+
+const VulkanSemaphores = struct {
+    handles: std.ArrayList(c.VkSemaphore),
+    allocator: std.mem.Allocator,
+    device: *const VulkanLogicalDevice,
+    allocation_callbacks: ?*c.VkAllocationCallbacks,
+
+    pub fn init(device: *const VulkanLogicalDevice, allocator: std.mem.Allocator, allocation_callbacks: ?*c.VkAllocationCallbacks) !@This() {
+        return .{
+            .handles = std.ArrayList(c.VkSemaphore).init(allocator),
+            .allocator = allocator,
+            .device = device,
+            .allocation_callbacks = allocation_callbacks,
+        };
+    }
+
+    pub fn deinit(self: *@This()) void {
+        for (self.handles.items) |handle| {
+            self.device.dispatch.DestroySemaphore(self.device.handle, handle, self.allocation_callbacks);
+        }
+        self.handles.deinit();
+    }
+
+    pub fn addSemaphore(self: *@This(), allocation_callbacks: ?*c.VkAllocationCallbacks) !void {
+        const create_info = std.mem.zeroInit(c.VkSemaphoreCreateInfo, c.VkSemaphoreCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        });
+
+        var handle: c.VkSemaphore = undefined;
+        if (self.device.dispatch.CreateSemaphore(self.device.handle, &create_info, allocation_callbacks, &handle) < 0) return error.VkCreateSemaphore;
+
+        try self.handles.append(handle);
+    }
+};
+
+const VulkanCommandPool = struct {
+    handle: c.VkCommandPool,
+    allocation_callbacks: ?*c.VkAllocationCallbacks,
+    allocator: std.mem.Allocator,
+    device: *const VulkanLogicalDevice,
+
+    pub fn init(device: *const VulkanLogicalDevice, allocator: std.mem.Allocator, allocation_callbacks: ?*c.VkAllocationCallbacks) !@This() {
+        const create_info = std.mem.zeroInit(c.VkCommandPoolCreateInfo, c.VkCommandPoolCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+            .queueFamilyIndex = device.physical_device.queue_family_index,
+            .flags = 0,
+        });
+
+        var handle: c.VkCommandPool = undefined;
+        if (device.dispatch.CreateCommandPool(device.handle, &create_info, allocation_callbacks, &handle) < 0) return error.VkCreateCommandPool;
+
+        return .{
+            .handle = handle,
+            .allocation_callbacks = allocation_callbacks,
+            .allocator = allocator,
+            .device = device,
+        };
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.device.dispatch.DestroyCommandPool(self.device.handle, self.handle, self.allocation_callbacks);
+    }
+
+    pub fn allocate(self: *@This(), count: u32, allocator: std.mem.Allocator) ![]VulkanCommandBuffer {
+        const allocate_info = std.mem.zeroInit(c.VkCommandBufferAllocateInfo, c.VkCommandBufferAllocateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .commandBufferCount = count,
+            .commandPool = self.handle,
+            .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        });
+
+        const handles = try allocator.alloc(VulkanCommandBuffer, count);
+        errdefer allocator.free(handles);
+
+        if (self.device.dispatch.AllocateCommandBuffers(self.device.handle, &allocate_info, @ptrCast(handles.ptr)) < 0) return error.VkAllocateCommandBuffers;
+
+        return handles;
+    }
+};
+
+const VulkanCommandBuffer = struct {
+    handle: c.VkCommandBuffer,
+
+    pub fn begin(self: *@This(), device: *VulkanLogicalDevice) !void {
+        const begin_info = std.mem.zeroInit(c.VkCommandBufferBeginInfo, c.VkCommandBufferBeginInfo{
+            .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        });
+
+        if (device.dispatch.BeginCommandBuffer(self.handle, &begin_info) < 0) return error.VkBeginCommandBuffer;
+    }
+
+    pub fn end(self: *@This(), device: *VulkanLogicalDevice) !void {
+        if (device.dispatch.EndCommandBuffer(self.handle) < 0) return error.VkEndCommandBuffer;
+    }
+};
 
 pub fn main() !void {
     var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{ .verbose_log = true }){};
@@ -518,6 +672,20 @@ pub fn main() !void {
     var swapchain = try logical_device.createSwapchain(&surface, window.getExtent(), allocator, null);
     defer swapchain.deinit();
 
+    var fences = try logical_device.createFences(allocator, null);
+    defer fences.deinit();
+    try fences.addFence(false, null);
+
+    var semaphores = try logical_device.createSemaphores(allocator, null);
+    defer semaphores.deinit();
+    try semaphores.addSemaphore(null);
+
+    var command_pool = try logical_device.createCommandPool(allocator, null);
+    defer command_pool.deinit();
+
+    const command_buffers = try command_pool.allocate(1, allocator);
+    defer allocator.free(command_buffers);
+
     std.debug.print("{d}\n{s}\n", .{
         @intFromPtr(swapchain.handle),
         physical_device.getProperties().deviceName,
@@ -529,7 +697,10 @@ pub fn main() !void {
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event) == c.SDL_TRUE) {
             switch (event.type) {
-                c.SDL_QUIT => break :main_loop,
+                c.SDL_QUIT => {
+                    try logical_device.waitIdle();
+                    break :main_loop;
+                },
                 c.SDL_WINDOWEVENT => switch (event.window.event) {
                     c.SDL_WINDOWEVENT_RESIZED => {
                         swapchain.deinit();
@@ -540,5 +711,34 @@ pub fn main() !void {
                 else => {},
             }
         }
+
+        const image_index = try swapchain.acquireNextImage(null, semaphores.handles.items[0], fences.handles.items[0]);
+        const image = swapchain.images[image_index];
+        _ = image;
+
+        var command_buffer = command_buffers[0];
+
+        try command_buffer.begin(&logical_device);
+        try command_buffer.end(&logical_device);
+
+        std.debug.print("doesit work 2", .{});
+
+        try logical_device.queueSubmit(command_buffers, fences.handles.items[0], &semaphores);
+
+        std.debug.print("doesit work 3", .{});
+
+        try swapchain.present(&semaphores, &fences, image_index);
+
+        std.debug.print("doesit work 4", .{});
+
+        try fences.wait(false, null);
+
+        std.debug.print("doesit work 5", .{});
+
+        try fences.reset();
+
+        std.debug.print("doesit work 6", .{});
+
+        //std.debug.print("cheese", .{});
     }
 }
