@@ -287,6 +287,7 @@ const VulkanLogicalDevice = struct {
         BeginCommandBuffer: std.meta.Child(c.PFN_vkBeginCommandBuffer) = undefined,
         EndCommandBuffer: std.meta.Child(c.PFN_vkEndCommandBuffer) = undefined,
         QueueSubmit: std.meta.Child(c.PFN_vkQueueSubmit) = undefined,
+        CmdPipelineBarrier: std.meta.Child(c.PFN_vkCmdPipelineBarrier) = undefined,
     };
 
     handle: c.VkDevice,
@@ -579,7 +580,7 @@ const VulkanCommandPool = struct {
         const create_info = std.mem.zeroInit(c.VkCommandPoolCreateInfo, c.VkCommandPoolCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
             .queueFamilyIndex = device.physical_device.queue_family_index,
-            .flags = 0,
+            .flags = c.VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
         });
 
         var handle: c.VkCommandPool = undefined;
@@ -627,6 +628,22 @@ const VulkanCommandBuffer = struct {
 
     pub fn end(self: *@This(), device: *VulkanLogicalDevice) !void {
         if (device.dispatch.EndCommandBuffer(self.handle) < 0) return error.VkEndCommandBuffer;
+    }
+
+    pub fn cmdPipelineBarrier(self: *@This(), device: *VulkanLogicalDevice, subresource_range: c.VkImageSubresourceRange, image: c.VkImage, old_layout: c.VkImageLayout, new_layout: c.VkImageLayout) void {
+        const barrier = std.mem.zeroInit(c.VkImageMemoryBarrier, c.VkImageMemoryBarrier{
+            .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .oldLayout = old_layout,
+            .newLayout = new_layout,
+            .image = image,
+            .srcQueueFamilyIndex = device.physical_device.queue_family_index,
+            .dstQueueFamilyIndex = device.physical_device.queue_family_index,
+            .subresourceRange = subresource_range,
+            // .srcAccessMask = c.VK_ACCESS_HOST_WRITE_BIT,
+            // .dstAccessMask = c.VK_ACCESS_TRANSFER_READ_BIT,
+        });
+
+        device.dispatch.CmdPipelineBarrier(self.handle, c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, c.VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, 0, 0, 0, 1, &barrier);
     }
 };
 
@@ -714,11 +731,13 @@ pub fn main() !void {
 
         const image_index = try swapchain.acquireNextImage(null, semaphores.handles.items[0], fences.handles.items[0]);
         const image = swapchain.images[image_index];
-        _ = image;
 
         var command_buffer = command_buffers[0];
 
         try command_buffer.begin(&logical_device);
+
+        command_buffer.cmdPipelineBarrier(&logical_device, c.VkImageSubresourceRange{ .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT, .baseArrayLayer = 0, .baseMipLevel = 0, .layerCount = 1, .levelCount = 1 }, image, c.VK_IMAGE_LAYOUT_UNDEFINED, c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+
         try command_buffer.end(&logical_device);
 
         std.debug.print("doesit work 2", .{});
