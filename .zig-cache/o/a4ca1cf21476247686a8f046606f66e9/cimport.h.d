@@ -27,6 +27,7 @@ cimport.o: \
   /usr/include/vk_video/vulkan_video_codec_h265std_decode.h \
   /usr/include/vk_video/vulkan_video_codec_av1std.h \
   /usr/include/vk_video/vulkan_video_codec_av1std_decode.h \
+  /usr/include/vk_video/vulkan_video_codec_av1std_encode.h \
   /usr/include/SDL2/SDL.h /usr/include/SDL2/SDL_main.h \
   /usr/include/SDL2/SDL_stdinc.h /usr/include/SDL2/SDL_config.h \
   /usr/include/SDL2/SDL_platform.h /usr/include/SDL2/begin_code.h \
