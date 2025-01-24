@@ -300,7 +300,7 @@ pub const VulkanPhysicalDevice = struct {
         var mem_properties: c.VkPhysicalDeviceMemoryProperties = undefined;
         self.instance.dispatch.GetPhysicalDeviceMemoryProperties(self.handle, &mem_properties);
         for (0..mem_properties.memoryTypeCount) |i| {
-            if ((filter & (1 << i)) and (mem_properties.memoryTypes[i].propertyFlags & properties) == properties) return i;
+            if ((filter & (@as(u32, 1) << @intCast(i))) != 0 and (mem_properties.memoryTypes[i].propertyFlags & properties) == properties) return @intCast(i);
         }
 
         return error.NoSuitableMemoryType;
@@ -346,6 +346,8 @@ pub const VulkanLogicalDevice = struct {
         FreeMemory: std.meta.Child(c.PFN_vkFreeMemory) = undefined,
         BindImageMemory: std.meta.Child(c.PFN_vkBindImageMemory) = undefined,
         GetImageMemoryRequirements: std.meta.Child(c.PFN_vkGetImageMemoryRequirements) = undefined,
+        CreateFramebuffer: std.meta.Child(c.PFN_vkCreateFramebuffer) = undefined,
+        DestroyFramebuffer: std.meta.Child(c.PFN_vkDestroyFramebuffer) = undefined,
     };
 
     handle: c.VkDevice,
@@ -437,7 +439,7 @@ pub const VulkanLogicalDevice = struct {
         const allocate_info = std.mem.zeroInit(c.VkMemoryAllocateInfo, c.VkMemoryAllocateInfo{
             .sType = c.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
             .allocationSize = requirements.size,
-            .memoryTypeIndex = self.physical_device.findMemoryType(requirements.memoryTypeBits, properties),
+            .memoryTypeIndex = try self.physical_device.findMemoryType(requirements.memoryTypeBits, properties),
         });
 
         var handle: c.VkDeviceMemory = undefined;
@@ -453,15 +455,15 @@ pub const VulkanLogicalDevice = struct {
 
 pub const VulkanImage = struct {
     handle: c.VkImage,
-    view: ?c.VkImageView,
-    memory: ?c.VkDeviceMemory,
+    view: c.VkImageView,
+    memory: c.VkDeviceMemory,
     device: *const VulkanLogicalDevice,
     allocation_callbacks: ?*c.VkAllocationCallbacks,
     should_destroy_image: bool,
 
     pub fn init(device: *const VulkanLogicalDevice, create_info: *c.VkImageCreateInfo, allocation_callbacks: ?*c.VkAllocationCallbacks) !@This() {
         var handle: c.VkImage = undefined;
-        if (device.dispatch.CreateImage(device.handle, &create_info, allocation_callbacks, &handle) < 0) return error.VkCreateImage;
+        if (device.dispatch.CreateImage(device.handle, create_info, allocation_callbacks, &handle) < 0) return error.VkCreateImage;
 
         return .{
             .handle = handle,
@@ -485,9 +487,9 @@ pub const VulkanImage = struct {
     }
 
     pub fn deinit(self: *@This()) void {
+        if (self.view != null) self.device.dispatch.DestroyImageView(self.device.handle, self.view, self.allocation_callbacks);
         if (self.should_destroy_image) self.device.dispatch.DestroyImage(self.device.handle, self.handle, self.allocation_callbacks);
-        if (self.view) |view| self.device.dispatch.DestroyImageView(self.device.handle, view, self.allocation_callbacks);
-        if (self.memory) |memory| self.device.freeMemory(memory, self.allocation_callbacks);
+        if (self.memory != null) self.device.freeMemory(self.memory, self.allocation_callbacks);
     }
 
     pub fn createView(self: *@This(), view_type: c.VkImageViewType, format: c.VkFormat, subresource_range: c.VkImageSubresourceRange) !void {
@@ -502,6 +504,8 @@ pub const VulkanImage = struct {
     }
 
     pub fn createMemory(self: *@This(), properties: c.VkMemoryPropertyFlags) !void {
+        if (self.memory != null) return error.MemoryNotNull;
+
         var requirements: c.VkMemoryRequirements = undefined;
         self.device.dispatch.GetImageMemoryRequirements(self.device.handle, self.handle, &requirements);
 
@@ -519,6 +523,11 @@ pub const VulkanSwapchain = struct {
     color_images: []VulkanImage,
     depth_images: []VulkanImage,
     render_pass: c.VkRenderPass,
+    frame_buffers: []c.VkFramebuffer,
+    image_available_semaphores: []c.VkSemaphore,
+    render_finished_semaphores: []c.VkSemaphore,
+    in_flight_fences: []c.VkFence,
+    images_in_flight: []VulkanImage,
     allocator: std.mem.Allocator,
 
     pub fn init(surface: *VulkanSurface, device: *const VulkanLogicalDevice, window_extent: c.VkExtent2D, allocator: std.mem.Allocator, allocation_callbacks: ?*c.VkAllocationCallbacks) !@This() {
@@ -668,7 +677,7 @@ pub const VulkanSwapchain = struct {
         var render_pass: c.VkRenderPass = undefined;
         if (device.dispatch.CreateRenderPass(device.handle, &render_pass_info, null, &render_pass) < 0) return error.VkCreateRenderPass;
 
-        var depth_images = allocator.alloc(VulkanImage, image_count);
+        var depth_images = try allocator.alloc(VulkanImage, image_count);
 
         for (0..image_count) |i| {
             const image_create_info = std.mem.zeroInit(c.VkImageCreateInfo, c.VkImageCreateInfo{
@@ -690,9 +699,9 @@ pub const VulkanSwapchain = struct {
                 .flags = 0,
             });
 
-            depth_images[i] = VulkanImage.init(device, &image_create_info, allocation_callbacks);
-            depth_images[i].createMemory(c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-            depth_images[i].createView(
+            depth_images[i] = try VulkanImage.init(device, @constCast(&image_create_info), allocation_callbacks);
+            try depth_images[i].createMemory(c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+            try depth_images[i].createView(
                 c.VK_IMAGE_VIEW_TYPE_2D,
                 depth_format,
                 c.VkImageSubresourceRange{
@@ -720,7 +729,27 @@ pub const VulkanSwapchain = struct {
                 .layers = 1,
             });
 
-            if (device.CreateFramebuffer(device.handle, &frame_buffer_create_info, null, &frame_buffers[i]) < 0) return error.VkCreateFrameBuffer;
+            if (device.dispatch.CreateFramebuffer(device.handle, &frame_buffer_create_info, null, &frame_buffers[i]) < 0) return error.VkCreateFrameBuffer;
+        }
+
+        const image_available_semaphores = try allocator.alloc(c.VkSemaphore, 2);
+        const render_finished_semaphores = try allocator.alloc(c.VkSemaphore, 2);
+        const in_flight_fences = try allocator.alloc(c.VkFence, 2);
+        const images_in_flight = try allocator.alloc(VulkanImage, image_count);
+
+        const semaphore_create_info = std.mem.zeroInit(c.VkSemaphoreCreateInfo, c.VkSemaphoreCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        });
+
+        const fence_create_info = std.mem.zeroInit(c.VkFenceCreateInfo, c.VkFenceCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+            .flags = c.VK_FENCE_CREATE_SIGNALED_BIT,
+        });
+
+        for (image_available_semaphores, render_finished_semaphores, in_flight_fences) |*image_semaphore, *render_semaphore, *fence| {
+            if (device.dispatch.CreateSemaphore(device.handle, &semaphore_create_info, null, image_semaphore) < 0) return error.VkCreateSemaphore;
+            if (device.dispatch.CreateSemaphore(device.handle, &semaphore_create_info, null, render_semaphore) < 0) return error.VkCreateSemaphore;
+            if (device.dispatch.CreateFence(device.handle, &fence_create_info, null, fence) < 0) return error.VkCreateFence;
         }
 
         return .{
@@ -731,21 +760,46 @@ pub const VulkanSwapchain = struct {
             .color_images = color_images,
             .depth_images = depth_images,
             .render_pass = render_pass,
+            .frame_buffers = frame_buffers,
+            .image_available_semaphores = image_available_semaphores,
+            .render_finished_semaphores = render_finished_semaphores,
+            .in_flight_fences = in_flight_fences,
+            .images_in_flight = images_in_flight,
             .allocator = allocator,
         };
     }
 
     pub fn deinit(self: *@This()) void {
-        self.device.dispatch.DestroySwapchainKHR(self.device.handle, self.handle, self.allocation_callbacks);
         for (self.color_images) |*color_image| {
             color_image.deinit();
         }
         self.allocator.free(self.color_images);
+
+        self.device.dispatch.DestroySwapchainKHR(self.device.handle, self.handle, self.allocation_callbacks);
+
+        for (self.depth_images) |*depth_image| {
+            depth_image.deinit();
+        }
+        self.allocator.free(self.depth_images);
+
+        for (self.frame_buffers) |frame_buffer| {
+            self.device.dispatch.DestroyFramebuffer(self.device.handle, frame_buffer, self.allocation_callbacks);
+        }
+
+        self.device.dispatch.DestroyRenderPass(self.device.handle, self.render_pass, self.allocation_callbacks);
+
+        for (self.image_available_semaphores, self.render_finished_semaphores, self.in_flight_fences) |image_semaphore, render_semaphore, fence| {
+            self.device.dispatch.DestroySemaphore(self.device.handle, image_semaphore, self.allocation_callbacks);
+            self.device.dispatch.DestroySemaphore(self.device.handle, render_semaphore, self.allocation_callbacks);
+            self.device.dispatch.DestroyFence(self.device.handle, fence, self.allocation_callbacks);
+        }
     }
 
-    pub fn acquireNextImage(self: *@This(), timeout_nanoseconds: ?u64, semaphore: c.VkSemaphore, fence: c.VkFence) !u32 {
+    pub fn acquireNextImage(self: *@This()) !u32 {
+        self.device.dispatch.WaitForFences(self.device.handle, 1, &self.in_flight_fences[self.current_frame], c.VK_TRUE, std.math.maxInt(u64));
+
         var result: u32 = undefined;
-        if (self.device.dispatch.AcquireNextImageKHR(self.device.handle, self.handle, timeout_nanoseconds orelse std.math.maxInt(u64), semaphore, fence, &result) < 0) return error.VkAcquireNextImage;
+        if (self.device.dispatch.AcquireNextImageKHR(self.device.handle, self.handle, std.math.maxInt(u64), self.image_available_semaphores[self.current_frame], c.VK_NULL_HANDLE, &result) < 0) return error.VkAcquireNextImage;
 
         return result;
     }
@@ -787,28 +841,35 @@ pub const VulkanCommandPool = struct {
             .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
         });
 
-        const handles = try allocator.alloc(VulkanCommandBuffer, count);
-        errdefer allocator.free(handles);
+        const handles = try allocator.alloc(c.VkCommandBuffer, count);
+        defer allocator.free(handles);
 
-        if (self.device.dispatch.AllocateCommandBuffers(self.device.handle, &allocate_info, @ptrCast(handles.ptr)) < 0) return error.VkAllocateCommandBuffers;
+        if (self.device.dispatch.AllocateCommandBuffers(self.device.handle, &allocate_info, handles.ptr) < 0) return error.VkAllocateCommandBuffers;
 
-        return handles;
+        const results = try allocator.alloc(VulkanCommandBuffer, count);
+
+        for (handles, results) |handle, *result| {
+            result.* = VulkanCommandBuffer{ .handle = handle, .device = self.device };
+        }
+
+        return results;
     }
 };
 
 pub const VulkanCommandBuffer = struct {
     handle: c.VkCommandBuffer,
+    device: *const VulkanLogicalDevice,
 
-    pub fn begin(self: *@This(), device: *VulkanLogicalDevice) !void {
+    pub fn begin(self: *@This()) !void {
         const begin_info = std.mem.zeroInit(c.VkCommandBufferBeginInfo, c.VkCommandBufferBeginInfo{
             .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         });
 
-        if (device.dispatch.BeginCommandBuffer(self.handle, &begin_info) < 0) return error.VkBeginCommandBuffer;
+        if (self.device.dispatch.BeginCommandBuffer(self.handle, &begin_info) < 0) return error.VkBeginCommandBuffer;
     }
 
-    pub fn end(self: *@This(), device: *VulkanLogicalDevice) !void {
-        if (device.dispatch.EndCommandBuffer(self.handle) < 0) return error.VkEndCommandBuffer;
+    pub fn end(self: *@This()) !void {
+        if (self.device.dispatch.EndCommandBuffer(self.handle) < 0) return error.VkEndCommandBuffer;
     }
 };
 
