@@ -527,7 +527,8 @@ pub const VulkanSwapchain = struct {
     image_available_semaphores: []c.VkSemaphore,
     render_finished_semaphores: []c.VkSemaphore,
     in_flight_fences: []c.VkFence,
-    images_in_flight: []VulkanImage,
+    images_in_flight: []c.VkFence,
+    current_frame: u32,
     allocator: std.mem.Allocator,
 
     pub fn init(surface: *VulkanSurface, device: *const VulkanLogicalDevice, window_extent: c.VkExtent2D, allocator: std.mem.Allocator, allocation_callbacks: ?*c.VkAllocationCallbacks) !@This() {
@@ -735,7 +736,8 @@ pub const VulkanSwapchain = struct {
         const image_available_semaphores = try allocator.alloc(c.VkSemaphore, 2);
         const render_finished_semaphores = try allocator.alloc(c.VkSemaphore, 2);
         const in_flight_fences = try allocator.alloc(c.VkFence, 2);
-        const images_in_flight = try allocator.alloc(VulkanImage, image_count);
+        const images_in_flight = try allocator.alloc(c.VkFence, image_count);
+        @memset(images_in_flight, null);
 
         const semaphore_create_info = std.mem.zeroInit(c.VkSemaphoreCreateInfo, c.VkSemaphoreCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
@@ -765,6 +767,7 @@ pub const VulkanSwapchain = struct {
             .render_finished_semaphores = render_finished_semaphores,
             .in_flight_fences = in_flight_fences,
             .images_in_flight = images_in_flight,
+            .current_frame = 0,
             .allocator = allocator,
         };
     }
@@ -802,6 +805,47 @@ pub const VulkanSwapchain = struct {
         if (self.device.dispatch.AcquireNextImageKHR(self.device.handle, self.handle, std.math.maxInt(u64), self.image_available_semaphores[self.current_frame], c.VK_NULL_HANDLE, &result) < 0) return error.VkAcquireNextImage;
 
         return result;
+    }
+
+    pub fn submitCommandBuffers(self: *@This(), buffer: *VulkanCommandBuffer, image_index: u32) !void {
+        if (self.images_in_flight[image_index] != null) |image| self.device.dispatch.WaitForFences(device.handle, 1, &image.handle, c.VK_TRUE, std.math.maxInt(u64));
+        self.images_in_flight[*image_index] = self.in_flight_fences[self.current_frame];
+
+        const wait_semaphore = self.image_available_semaphores[self.current_frame];
+        const wait_stage = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        const signal_semaphore = self.render_finished_semaphores[self.current_frame];
+
+        const submit_info = std.mem.zeroInit(c.VkSubmitInfo, c.VkSubmitInfo{
+            .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &wait_semaphore,
+            .pWaitDstStageMask = &wait_stage,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &buffer.handle,
+            .signalSemaphoreCount = 1,
+            .pSignalSemaphores = &signal_semaphore,
+        });
+
+        self.device.dispatch.ResetFences(self.device.handle, 1, &self.in_flight_fences[self.current_frame]);
+        self.device.dispatch.QueueSubmit(self.device.queue, 1, &submit_info, self.in_flight_fences[self.current_frame]);
+
+      VkPresentInfoKHR presentInfo = {self.device.dispatch};
+      presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+
+      presentInfo.waitSemaphoreCount = 1;
+      presentInfo.pWaitSemaphores = signalSemaphores;
+
+      VkSwapchainKHR swapChains[] = {swapChain};
+      presentInfo.swapchainCount = 1;
+      presentInfo.pSwapchains = swapChains;
+
+      presentInfo.pImageIndices = imageIndex;
+
+      auto result = vkQueuePresentKHR(device.presentQueue(), &presentInfo);
+
+      currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+
+      return result;
     }
 };
 
