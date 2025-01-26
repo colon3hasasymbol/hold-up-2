@@ -110,6 +110,7 @@ pub const VulkanInstance = struct {
         GetPhysicalDeviceSurfaceFormatsKHR: std.meta.Child(c.PFN_vkGetPhysicalDeviceSurfaceFormatsKHR) = undefined,
         GetPhysicalDeviceSurfacePresentModesKHR: std.meta.Child(c.PFN_vkGetPhysicalDeviceSurfacePresentModesKHR) = undefined,
         GetPhysicalDeviceMemoryProperties: std.meta.Child(c.PFN_vkGetPhysicalDeviceMemoryProperties) = undefined,
+        CreateGraphicsPipelines: std.meta.Child(c.PFN_vkCreateGraphicsPipelines) = undefined,
     };
 
     handle: c.VkInstance,
@@ -192,13 +193,17 @@ pub const VulkanInstance = struct {
             const queue_families_properties = try self.getPhysicalDeviceQueueFamilyProperties(physical_device, allocator);
             defer allocator.free(queue_families_properties);
 
+            var graphics_queue_family_index: ?u32 = null;
+            var present_queue_family_index: ?u32 = null;
+
             for (queue_families_properties, 0..) |queue_family_properties, index| {
                 var is_surface_supported = true;
                 if (maybe_surface) |surface| is_surface_supported = try surface.getPhysicalDeviceSupport(physical_device, @intCast(index));
 
-                if (((queue_family_properties.queueFlags & c.VK_QUEUE_GRAPHICS_BIT) != 0) and is_surface_supported) {
-                    return VulkanPhysicalDevice.init(physical_device, self, @intCast(index));
-                }
+                if (is_surface_supported) present_queue_family_index = @intCast(index);
+                if ((queue_family_properties.queueFlags & c.VK_QUEUE_GRAPHICS_BIT) != 0) graphics_queue_family_index = @intCast(index);
+
+                if (graphics_queue_family_index != null and present_queue_family_index != null) return VulkanPhysicalDevice.init(physical_device, self, graphics_queue_family_index.?, present_queue_family_index.?);
             }
         }
 
@@ -247,13 +252,15 @@ pub const VulkanPhysicalDevice = struct {
 
     instance: *const VulkanInstance,
     handle: c.VkPhysicalDevice,
-    queue_family_index: u32,
+    graphics_queue_family_index: u32,
+    present_queue_family_index: u32,
 
-    pub fn init(handle: c.VkPhysicalDevice, instance: *const VulkanInstance, queue_family_index: u32) !@This() {
+    pub fn init(handle: c.VkPhysicalDevice, instance: *const VulkanInstance, graphics_queue_family_index: u32, present_queue_family_index: u32) !@This() {
         return .{
             .instance = instance,
             .handle = handle,
-            .queue_family_index = queue_family_index,
+            .graphics_queue_family_index = graphics_queue_family_index,
+            .present_queue_family_index = present_queue_family_index,
         };
     }
 
@@ -353,7 +360,8 @@ pub const VulkanLogicalDevice = struct {
     handle: c.VkDevice,
     allocation_callbacks: ?*c.VkAllocationCallbacks,
     physical_device: *const VulkanPhysicalDevice,
-    queue: c.VkQueue,
+    graphics_queue: c.VkQueue,
+    present_queue: c.VkQueue,
     dispatch: Dispatch,
 
     pub fn init(physical_device: *const VulkanPhysicalDevice, allocation_callbacks: ?*c.VkAllocationCallbacks) !@This() {
@@ -362,7 +370,13 @@ pub const VulkanLogicalDevice = struct {
         const queue_create_infos = [_]c.VkDeviceQueueCreateInfo{
             std.mem.zeroInit(c.VkDeviceQueueCreateInfo, c.VkDeviceQueueCreateInfo{
                 .sType = c.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-                .queueFamilyIndex = physical_device.queue_family_index,
+                .queueFamilyIndex = physical_device.graphics_queue_family_index,
+                .queueCount = @as(u32, queue_priorities.len),
+                .pQueuePriorities = &queue_priorities,
+            }),
+            std.mem.zeroInit(c.VkDeviceQueueCreateInfo, c.VkDeviceQueueCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+                .queueFamilyIndex = physical_device.present_queue_family_index,
                 .queueCount = @as(u32, queue_priorities.len),
                 .pQueuePriorities = &queue_priorities,
             }),
@@ -374,7 +388,7 @@ pub const VulkanLogicalDevice = struct {
 
         const create_info = std.mem.zeroInit(c.VkDeviceCreateInfo, c.VkDeviceCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-            .queueCreateInfoCount = @as(u32, queue_create_infos.len),
+            .queueCreateInfoCount = if (physical_device.graphics_queue_family_index == physical_device.present_queue_family_index) 1 else 2,
             .pQueueCreateInfos = &queue_create_infos,
             .enabledExtensionCount = @as(u32, extensions.len),
             .ppEnabledExtensionNames = &extensions,
@@ -385,14 +399,18 @@ pub const VulkanLogicalDevice = struct {
 
         const dispatch = try physical_device.instance.load(Dispatch, handle);
 
-        var queue: c.VkQueue = undefined;
-        dispatch.GetDeviceQueue(handle, physical_device.queue_family_index, 0, &queue);
+        var graphics_queue: c.VkQueue = undefined;
+        dispatch.GetDeviceQueue(handle, physical_device.graphics_queue_family_index, 0, &graphics_queue);
+
+        var present_queue: c.VkQueue = undefined;
+        dispatch.GetDeviceQueue(handle, physical_device.present_queue_family_index, 0, &present_queue);
 
         return .{
             .handle = handle,
             .allocation_callbacks = allocation_callbacks,
             .physical_device = physical_device,
-            .queue = queue,
+            .graphics_queue = graphics_queue,
+            .present_queue = present_queue,
             .dispatch = dispatch,
         };
     }
@@ -416,8 +434,8 @@ pub const VulkanLogicalDevice = struct {
         if (self.dispatch.DeviceWaitIdle(self.handle) < 0) return error.VkDeviceWaitIdle;
     }
 
-    pub fn createCommandPool(self: *const @This(), allocator: std.mem.Allocator, allocation_callbacks: ?*c.VkAllocationCallbacks) !VulkanCommandPool {
-        return VulkanCommandPool.init(self, allocator, allocation_callbacks);
+    pub fn createCommandPool(self: *const @This(), queue_family_index: u32, allocator: std.mem.Allocator, allocation_callbacks: ?*c.VkAllocationCallbacks) !VulkanCommandPool {
+        return VulkanCommandPool.init(self, queue_family_index, allocator, allocation_callbacks);
     }
 
     pub fn findSupportedFormat(self: *const @This(), candidates: []const c.VkFormat, tiling: c.VkImageTiling, features: c.VkFormatFeatureFlags) !c.VkFormat {
@@ -563,7 +581,7 @@ pub const VulkanSwapchain = struct {
             extent = actual_extent;
         }
 
-        const queue_family_indices = [_]u32{device.physical_device.queue_family_index};
+        const queue_family_indices = [_]u32{ device.physical_device.graphics_queue_family_index, device.physical_device.present_queue_family_index };
 
         const create_info = std.mem.zeroInit(c.VkSwapchainCreateInfoKHR, c.VkSwapchainCreateInfoKHR{
             .sType = c.VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
@@ -577,7 +595,7 @@ pub const VulkanSwapchain = struct {
             .compositeAlpha = c.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
             .queueFamilyIndexCount = @as(u32, queue_family_indices.len),
             .pQueueFamilyIndices = &queue_family_indices,
-            .imageSharingMode = if (queue_family_indices.len == 1) c.VK_SHARING_MODE_EXCLUSIVE else c.VK_SHARING_MODE_CONCURRENT,
+            .imageSharingMode = if (queue_family_indices[0] == queue_family_indices[1]) c.VK_SHARING_MODE_EXCLUSIVE else c.VK_SHARING_MODE_CONCURRENT,
             .imageArrayLayers = 1,
             .imageExtent = extent,
             .minImageCount = if (swapchain_support.capabilities.maxImageCount == 0) swapchain_support.capabilities.minImageCount + 1 else @min(swapchain_support.capabilities.minImageCount + 1, swapchain_support.capabilities.maxImageCount),
@@ -808,8 +826,8 @@ pub const VulkanSwapchain = struct {
     }
 
     pub fn submitCommandBuffers(self: *@This(), buffer: *VulkanCommandBuffer, image_index: u32) !void {
-        if (self.images_in_flight[image_index] != null) |image| self.device.dispatch.WaitForFences(device.handle, 1, &image.handle, c.VK_TRUE, std.math.maxInt(u64));
-        self.images_in_flight[*image_index] = self.in_flight_fences[self.current_frame];
+        if (self.images_in_flight[image_index] != null) |image| self.device.dispatch.WaitForFences(self.device.handle, 1, &image.handle, c.VK_TRUE, std.math.maxInt(u64));
+        self.images_in_flight[image_index] = self.in_flight_fences[self.current_frame];
 
         const wait_semaphore = self.image_available_semaphores[self.current_frame];
         const wait_stage = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -827,25 +845,20 @@ pub const VulkanSwapchain = struct {
         });
 
         self.device.dispatch.ResetFences(self.device.handle, 1, &self.in_flight_fences[self.current_frame]);
-        self.device.dispatch.QueueSubmit(self.device.queue, 1, &submit_info, self.in_flight_fences[self.current_frame]);
+        self.device.dispatch.QueueSubmit(self.device.graphics_queue, 1, &submit_info, self.in_flight_fences[self.current_frame]);
 
-      VkPresentInfoKHR presentInfo = {self.device.dispatch};
-      presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+        const present_info = std.mem.zeroInit(c.VkPresentInfoKHR, c.VkPresentInfoKHR{
+            .sType = c.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &signal_semaphore,
+            .swapchainCount = 1,
+            .pSwapchains = &self.handle,
+            .pImageIndices = image_index,
+        });
 
-      presentInfo.waitSemaphoreCount = 1;
-      presentInfo.pWaitSemaphores = signalSemaphores;
+        if (self.device.dispatch.QueuePresentKHR(self.device.present_queue, &present_info) < 0) return error.VkQueuePresent;
 
-      VkSwapchainKHR swapChains[] = {swapChain};
-      presentInfo.swapchainCount = 1;
-      presentInfo.pSwapchains = swapChains;
-
-      presentInfo.pImageIndices = imageIndex;
-
-      auto result = vkQueuePresentKHR(device.presentQueue(), &presentInfo);
-
-      currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
-
-      return result;
+        self.current_frame = (self.current_frame + 1) % 2;
     }
 };
 
@@ -855,10 +868,10 @@ pub const VulkanCommandPool = struct {
     allocator: std.mem.Allocator,
     device: *const VulkanLogicalDevice,
 
-    pub fn init(device: *const VulkanLogicalDevice, allocator: std.mem.Allocator, allocation_callbacks: ?*c.VkAllocationCallbacks) !@This() {
+    pub fn init(device: *const VulkanLogicalDevice, queue_family_index: u32, allocator: std.mem.Allocator, allocation_callbacks: ?*c.VkAllocationCallbacks) !@This() {
         const create_info = std.mem.zeroInit(c.VkCommandPoolCreateInfo, c.VkCommandPoolCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-            .queueFamilyIndex = device.physical_device.queue_family_index,
+            .queueFamilyIndex = queue_family_index,
             .flags = c.VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
         });
 
@@ -922,11 +935,11 @@ pub const VulkanShaderModule = struct {
     device: *const VulkanLogicalDevice,
     allocation_callbacks: ?*c.VkAllocationCallbacks,
 
-    pub fn init(device: *const VulkanLogicalDevice, shader_code: []u8, allocation_callbacks: ?*c.VkAllocationCallbacks) !@This() {
+    pub fn init(device: *const VulkanLogicalDevice, shader_code: []u32, allocation_callbacks: ?*c.VkAllocationCallbacks) !@This() {
         const create_info = std.mem.zeroInit(c.VkShaderModuleCreateInfo, c.VkShaderModuleCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-            .codeSize = shader_code.len,
-            .pCode = @ptrCast(@alignCast(shader_code.ptr)),
+            .codeSize = shader_code.len * @sizeOf(u32),
+            .pCode = shader_code.ptr,
         });
 
         var handle: c.VkShaderModule = undefined;
@@ -1088,6 +1101,7 @@ pub const VulkanPipeline = struct {
         });
 
         var handle: c.VkPipeline = undefined;
+        std.debug.print("{any}\n", .{device.dispatch.CreateGraphicsPipelines});
         if (device.dispatch.CreateGraphicsPipelines(device.handle, @ptrCast(c.VK_NULL_HANDLE), 1, &create_info, allocation_callbacks, &handle) < 0) return error.VkCreateGraphicsPipelines;
 
         return .{
@@ -1101,6 +1115,21 @@ pub const VulkanPipeline = struct {
 
     pub fn deinit(self: *@This()) void {
         self.device.dispatch.DestroyPipeline(self.device.handle, self.handle, self.allocation_callbacks);
+    }
+
+    pub fn createLayout(device: *const VulkanLogicalDevice, allocation_callbacks: ?*c.VkAllocationCallbacks) !c.VkPipelineLayout {
+        const create_info = std.mem.zeroInit(c.VkPipelineLayoutCreateInfo, c.VkPipelineLayoutCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        });
+
+        var result: c.VkPipelineLayout = undefined;
+        if (device.dispatch.CreatePipelineLayout(device.handle, &create_info, allocation_callbacks, &result) < 0) return error.VkCreatePipelineLayout;
+
+        return result;
+    }
+
+    pub fn destroyLayout(device: *const VulkanLogicalDevice, layout: c.VkPipelineLayout, allocation_callbacks: ?*c.VkAllocationCallbacks) void {
+        device.dispatch.DestroyPipelineLayout(device.handle, layout, allocation_callbacks);
     }
 };
 
@@ -1138,19 +1167,39 @@ pub fn main() !void {
     var swapchain = try logical_device.createSwapchain(&surface, window.getExtent(), allocator, null);
     defer swapchain.deinit();
 
-    var command_pool = try logical_device.createCommandPool(allocator, null);
+    var command_pool = try logical_device.createCommandPool(physical_device.graphics_queue_family_index, allocator, null);
     defer command_pool.deinit();
 
     const command_buffers = try command_pool.allocate(1, allocator);
     defer allocator.free(command_buffers);
 
     const window_extent = window.getExtent();
-    const pipeline_config = VulkanPipeline.ConfigInfo.init(window_extent.width, window_extent.height);
+    var pipeline_config = VulkanPipeline.ConfigInfo.init(window_extent.width, window_extent.height);
 
-    var frag_shader = try VulkanShaderModule.init(&logical_device, @constCast(@embedFile("shaders/simple_shader.frag.spv")), null);
+    pipeline_config.render_pass = swapchain.render_pass;
+    pipeline_config.pipeline_layout = try VulkanPipeline.createLayout(&logical_device, null);
+    defer VulkanPipeline.destroyLayout(&logical_device, pipeline_config.pipeline_layout, null);
+
+    const frag_bytes = @embedFile("shaders/simple_shader.frag.spv");
+    const frag_code = try allocator.alloc(u32, frag_bytes.len / 4);
+    defer allocator.free(frag_code);
+    for (frag_code, 0..) |*u, i| {
+        const j align(4) = [_]u8{ frag_bytes[i * 4], frag_bytes[(i * 4) + 1], frag_bytes[(i * 4) + 2], frag_bytes[(i * 4) + 3] };
+        u.* = @bitCast(j);
+    }
+
+    var frag_shader = try VulkanShaderModule.init(&logical_device, frag_code, null);
     defer frag_shader.deinit();
 
-    var vert_shader = try VulkanShaderModule.init(&logical_device, @constCast(@embedFile("shaders/simple_shader.vert.spv")), null);
+    const vert_bytes = @embedFile("shaders/simple_shader.vert.spv");
+    const vert_code = try allocator.alloc(u32, frag_bytes.len / 4);
+    defer allocator.free(vert_code);
+    for (vert_code, 0..) |*u, i| {
+        const j align(4) = [_]u8{ vert_bytes[i * 4], vert_bytes[(i * 4) + 1], vert_bytes[(i * 4) + 2], vert_bytes[(i * 4) + 3] };
+        u.* = @bitCast(j);
+    }
+
+    var vert_shader = try VulkanShaderModule.init(&logical_device, vert_code, null);
     defer vert_shader.deinit();
 
     var pipeline = try VulkanPipeline.init(&logical_device, &pipeline_config, &frag_shader, &vert_shader, null);
