@@ -958,114 +958,80 @@ pub const VulkanShaderModule = struct {
 };
 
 pub const VulkanPipeline = struct {
-    pub const ConfigInfo = struct {
-        viewport: c.VkViewport,
-        scissor: c.VkRect2D,
-        viewport_info: c.VkPipelineViewportStateCreateInfo,
-        input_assembly_info: c.VkPipelineInputAssemblyStateCreateInfo,
-        rasterization_info: c.VkPipelineRasterizationStateCreateInfo,
-        multisample_info: c.VkPipelineMultisampleStateCreateInfo,
-        color_blend_attachment: c.VkPipelineColorBlendAttachmentState,
-        color_blend_info: c.VkPipelineColorBlendStateCreateInfo,
-        depth_stencil_info: c.VkPipelineDepthStencilStateCreateInfo,
-        pipeline_layout: c.VkPipelineLayout,
-        render_pass: c.VkRenderPass,
-        subpass: u32,
-
-        pub fn init(width: u32, height: u32) @This() {
-            const input_assembly_info = std.mem.zeroInit(c.VkPipelineInputAssemblyStateCreateInfo, c.VkPipelineInputAssemblyStateCreateInfo{
-                .sType = c.VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-                .topology = c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-                .primitiveRestartEnable = c.VK_FALSE,
-            });
-
-            const viewport = std.mem.zeroInit(c.VkViewport, c.VkViewport{
-                .x = 0.0,
-                .y = 0.0,
-                .width = @floatFromInt(width),
-                .height = @floatFromInt(height),
-                .minDepth = 0.0,
-                .maxDepth = 1.0,
-            });
-
-            std.debug.print("{}, {}\n", .{ viewport.width, viewport.height });
-
-            const scissor = std.mem.zeroInit(c.VkRect2D, c.VkRect2D{
-                .offset = std.mem.zeroes(c.VkOffset2D),
-                .extent = .{ .width = width, .height = height },
-            });
-
-            const viewport_info = std.mem.zeroInit(c.VkPipelineViewportStateCreateInfo, c.VkPipelineViewportStateCreateInfo{
-                .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-                .viewportCount = 1,
-                .pViewports = &viewport,
-                .scissorCount = 1,
-                .pScissors = &scissor,
-            });
-
-            const rasterization_info = std.mem.zeroInit(c.VkPipelineRasterizationStateCreateInfo, c.VkPipelineRasterizationStateCreateInfo{
-                .sType = c.VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-                .depthClampEnable = c.VK_FALSE,
-                .rasterizerDiscardEnable = c.VK_FALSE,
-                .polygonMode = c.VK_POLYGON_MODE_FILL,
-                .lineWidth = 1.0,
-                .cullMode = c.VK_CULL_MODE_NONE,
-                .frontFace = c.VK_FRONT_FACE_CLOCKWISE,
-                .depthBiasEnable = c.VK_FALSE,
-            });
-
-            const multisample_info = std.mem.zeroInit(c.VkPipelineMultisampleStateCreateInfo, c.VkPipelineMultisampleStateCreateInfo{
-                .sType = c.VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-                .sampleShadingEnable = c.VK_FALSE,
-                .rasterizationSamples = c.VK_SAMPLE_COUNT_1_BIT,
-            });
-
-            const color_blend_attachment = std.mem.zeroInit(c.VkPipelineColorBlendAttachmentState, c.VkPipelineColorBlendAttachmentState{
-                .colorWriteMask = c.VK_COLOR_COMPONENT_R_BIT | c.VK_COLOR_COMPONENT_G_BIT | c.VK_COLOR_COMPONENT_B_BIT | c.VK_COLOR_COMPONENT_A_BIT,
-                .blendEnable = c.VK_FALSE,
-            });
-
-            const color_blend_info = std.mem.zeroInit(c.VkPipelineColorBlendStateCreateInfo, c.VkPipelineColorBlendStateCreateInfo{
-                .sType = c.VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-                .logicOpEnable = c.VK_FALSE,
-                .attachmentCount = 1,
-                .pAttachments = &color_blend_attachment,
-            });
-
-            const depth_stencil_info = std.mem.zeroInit(c.VkPipelineDepthStencilStateCreateInfo, c.VkPipelineDepthStencilStateCreateInfo{
-                .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-                .depthTestEnable = c.VK_TRUE,
-                .depthWriteEnable = c.VK_TRUE,
-                .depthCompareOp = c.VK_COMPARE_OP_LESS,
-                .depthBoundsTestEnable = c.VK_FALSE,
-            });
-
-            return .{
-                .input_assembly_info = input_assembly_info,
-                .viewport = viewport,
-                .scissor = scissor,
-                .viewport_info = viewport_info,
-                .rasterization_info = rasterization_info,
-                .multisample_info = multisample_info,
-                .color_blend_attachment = color_blend_attachment,
-                .color_blend_info = color_blend_info,
-                .depth_stencil_info = depth_stencil_info,
-                .pipeline_layout = null,
-                .render_pass = null,
-                .subpass = 0,
-            };
-        }
-    };
-
     handle: c.VkPipeline,
     device: *const VulkanLogicalDevice,
     frag_shader: *const VulkanShaderModule,
     vert_shader: *const VulkanShaderModule,
     allocation_callbacks: ?*c.VkAllocationCallbacks,
 
-    pub fn init(device: *const VulkanLogicalDevice, config_info: *const ConfigInfo, frag_shader: *const VulkanShaderModule, vert_shader: *const VulkanShaderModule, allocation_callbacks: ?*c.VkAllocationCallbacks) !@This() {
-        if (config_info.pipeline_layout == null) return error.PipelineLayoutIsNull;
-        if (config_info.render_pass == null) return error.RenderPassIsNull;
+    pub fn init(device: *const VulkanLogicalDevice, pipeline_layout: c.VkPipelineLayout, render_pass: c.VkRenderPass, frag_shader: *const VulkanShaderModule, vert_shader: *const VulkanShaderModule, extent: c.VkExtent2D, allocation_callbacks: ?*c.VkAllocationCallbacks) !@This() {
+        const input_assembly_info = std.mem.zeroInit(c.VkPipelineInputAssemblyStateCreateInfo, c.VkPipelineInputAssemblyStateCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+            .topology = c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+            .primitiveRestartEnable = c.VK_FALSE,
+        });
+
+        const viewport = std.mem.zeroInit(c.VkViewport, c.VkViewport{
+            .x = 0.0,
+            .y = 0.0,
+            .width = @floatFromInt(extent.width),
+            .height = @floatFromInt(extent.height),
+            .minDepth = 0.0,
+            .maxDepth = 1.0,
+        });
+
+        std.debug.print("{}, {}\n", .{ viewport.width, viewport.height });
+
+        const scissor = std.mem.zeroInit(c.VkRect2D, c.VkRect2D{
+            .offset = std.mem.zeroes(c.VkOffset2D),
+            .extent = .{ .width = extent.width, .height = extent.height },
+        });
+
+        const viewport_info = std.mem.zeroInit(c.VkPipelineViewportStateCreateInfo, c.VkPipelineViewportStateCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+            .viewportCount = 1,
+            .pViewports = &viewport,
+            .scissorCount = 1,
+            .pScissors = &scissor,
+        });
+
+        const rasterization_info = std.mem.zeroInit(c.VkPipelineRasterizationStateCreateInfo, c.VkPipelineRasterizationStateCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+            .depthClampEnable = c.VK_FALSE,
+            .rasterizerDiscardEnable = c.VK_FALSE,
+            .polygonMode = c.VK_POLYGON_MODE_FILL,
+            .lineWidth = 1.0,
+            .cullMode = c.VK_CULL_MODE_NONE,
+            .frontFace = c.VK_FRONT_FACE_CLOCKWISE,
+            .depthBiasEnable = c.VK_FALSE,
+        });
+
+        const multisample_info = std.mem.zeroInit(c.VkPipelineMultisampleStateCreateInfo, c.VkPipelineMultisampleStateCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+            .sampleShadingEnable = c.VK_FALSE,
+            .rasterizationSamples = c.VK_SAMPLE_COUNT_1_BIT,
+        });
+        _ = multisample_info;
+
+        const color_blend_attachment = std.mem.zeroInit(c.VkPipelineColorBlendAttachmentState, c.VkPipelineColorBlendAttachmentState{
+            .colorWriteMask = c.VK_COLOR_COMPONENT_R_BIT | c.VK_COLOR_COMPONENT_G_BIT | c.VK_COLOR_COMPONENT_B_BIT | c.VK_COLOR_COMPONENT_A_BIT,
+            .blendEnable = c.VK_FALSE,
+        });
+
+        const color_blend_info = std.mem.zeroInit(c.VkPipelineColorBlendStateCreateInfo, c.VkPipelineColorBlendStateCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+            .logicOpEnable = c.VK_FALSE,
+            .attachmentCount = 1,
+            .pAttachments = &color_blend_attachment,
+        });
+
+        const depth_stencil_info = std.mem.zeroInit(c.VkPipelineDepthStencilStateCreateInfo, c.VkPipelineDepthStencilStateCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+            .depthTestEnable = c.VK_TRUE,
+            .depthWriteEnable = c.VK_TRUE,
+            .depthCompareOp = c.VK_COMPARE_OP_LESS,
+            .depthBoundsTestEnable = c.VK_FALSE,
+        });
 
         const shader_stages = [_]c.VkPipelineShaderStageCreateInfo{
             std.mem.zeroInit(c.VkPipelineShaderStageCreateInfo, c.VkPipelineShaderStageCreateInfo{
@@ -1089,15 +1055,15 @@ pub const VulkanPipeline = struct {
             .stageCount = 2,
             .pStages = &shader_stages,
             .pVertexInputState = &vertex_input_info,
-            .pInputAssemblyState = &config_info.input_assembly_info,
-            .pViewportState = &config_info.viewport_info,
-            .pRasterizationState = &config_info.rasterization_info,
-            .pColorBlendState = &config_info.color_blend_info,
-            .pDepthStencilState = &config_info.depth_stencil_info,
+            .pInputAssemblyState = &input_assembly_info,
+            .pViewportState = &viewport_info,
+            .pRasterizationState = &rasterization_info,
+            .pColorBlendState = &color_blend_info,
+            .pDepthStencilState = &depth_stencil_info,
             .pDynamicState = null,
-            .layout = config_info.pipeline_layout,
-            .renderPass = config_info.render_pass,
-            .subpass = config_info.subpass,
+            .layout = pipeline_layout,
+            .renderPass = render_pass,
+            .subpass = 0,
             .basePipelineIndex = -1,
             .basePipelineHandle = @ptrCast(c.VK_NULL_HANDLE),
         });
@@ -1109,7 +1075,7 @@ pub const VulkanPipeline = struct {
         if (device.dispatch.CreateGraphicsPipelines(device.handle, @ptrCast(c.VK_NULL_HANDLE), 1, &create_info, allocation_callbacks, &handle) < 0) return error.VkCreateGraphicsPipelines;
 
         return .{
-            .handle = undefined,
+            .handle = handle,
             .device = device,
             .frag_shader = frag_shader,
             .vert_shader = vert_shader,
@@ -1179,13 +1145,9 @@ pub fn main() !void {
 
     const window_extent = window.getExtent();
     std.debug.print("{any}\n", .{window_extent});
-    var pipeline_config = VulkanPipeline.ConfigInfo.init(window_extent.width, window_extent.height);
 
-    std.debug.print("{}, {}\n", .{ pipeline_config.viewport_info.pViewports.*.width, pipeline_config.viewport_info.pViewports.*.height });
-
-    pipeline_config.render_pass = swapchain.render_pass;
-    pipeline_config.pipeline_layout = try VulkanPipeline.createLayout(&logical_device, null);
-    defer VulkanPipeline.destroyLayout(&logical_device, pipeline_config.pipeline_layout, null);
+    const pipeline_layout = try VulkanPipeline.createLayout(&logical_device, null);
+    defer VulkanPipeline.destroyLayout(&logical_device, pipeline_layout, null);
 
     const frag_spv align(@alignOf(u32)) = @embedFile("shaders/simple_shader.frag.spv").*;
     const vert_spv align(@alignOf(u32)) = @embedFile("shaders/simple_shader.vert.spv").*;
@@ -1196,7 +1158,7 @@ pub fn main() !void {
     var vert_shader = try VulkanShaderModule.init(&logical_device, &vert_spv, null);
     defer vert_shader.deinit();
 
-    var pipeline = try VulkanPipeline.init(&logical_device, &pipeline_config, &frag_shader, &vert_shader, null);
+    var pipeline = try VulkanPipeline.init(&logical_device, pipeline_layout, swapchain.render_pass, &frag_shader, &vert_shader, window_extent, null);
     defer pipeline.deinit();
 
     std.debug.print("{d}\n{s}\n", .{
