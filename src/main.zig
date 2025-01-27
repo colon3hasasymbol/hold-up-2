@@ -935,11 +935,11 @@ pub const VulkanShaderModule = struct {
     device: *const VulkanLogicalDevice,
     allocation_callbacks: ?*c.VkAllocationCallbacks,
 
-    pub fn init(device: *const VulkanLogicalDevice, shader_code: []u32, allocation_callbacks: ?*c.VkAllocationCallbacks) !@This() {
+    pub fn init(device: *const VulkanLogicalDevice, shader_code: []const u8, allocation_callbacks: ?*c.VkAllocationCallbacks) !@This() {
         const create_info = std.mem.zeroInit(c.VkShaderModuleCreateInfo, c.VkShaderModuleCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-            .codeSize = shader_code.len * @sizeOf(u32),
-            .pCode = shader_code.ptr,
+            .codeSize = shader_code.len,
+            .pCode = @ptrCast(@alignCast(shader_code.ptr)),
         });
 
         var handle: c.VkShaderModule = undefined;
@@ -987,6 +987,8 @@ pub const VulkanPipeline = struct {
                 .minDepth = 0.0,
                 .maxDepth = 1.0,
             });
+
+            std.debug.print("{}, {}\n", .{ viewport.width, viewport.height });
 
             const scissor = std.mem.zeroInit(c.VkRect2D, c.VkRect2D{
                 .offset = std.mem.zeroes(c.VkOffset2D),
@@ -1038,7 +1040,7 @@ pub const VulkanPipeline = struct {
                 .depthBoundsTestEnable = c.VK_FALSE,
             });
 
-            return std.mem.zeroInit(@This(), @This(){
+            return .{
                 .input_assembly_info = input_assembly_info,
                 .viewport = viewport,
                 .scissor = scissor,
@@ -1051,7 +1053,7 @@ pub const VulkanPipeline = struct {
                 .pipeline_layout = null,
                 .render_pass = null,
                 .subpass = 0,
-            });
+            };
         }
     };
 
@@ -1099,6 +1101,8 @@ pub const VulkanPipeline = struct {
             .basePipelineIndex = -1,
             .basePipelineHandle = @ptrCast(c.VK_NULL_HANDLE),
         });
+
+        std.debug.print("{d}, {d}\n", .{ @as(u32, @intFromFloat(create_info.pViewportState.*.pViewports.*.width)), @as(u32, @intFromFloat(create_info.pViewportState.*.pViewports.*.height)) });
 
         var handle: c.VkPipeline = undefined;
         std.debug.print("{any}\n", .{device.dispatch.CreateGraphicsPipelines});
@@ -1174,32 +1178,22 @@ pub fn main() !void {
     defer allocator.free(command_buffers);
 
     const window_extent = window.getExtent();
+    std.debug.print("{any}\n", .{window_extent});
     var pipeline_config = VulkanPipeline.ConfigInfo.init(window_extent.width, window_extent.height);
+
+    std.debug.print("{}, {}\n", .{ pipeline_config.viewport_info.pViewports.*.width, pipeline_config.viewport_info.pViewports.*.height });
 
     pipeline_config.render_pass = swapchain.render_pass;
     pipeline_config.pipeline_layout = try VulkanPipeline.createLayout(&logical_device, null);
     defer VulkanPipeline.destroyLayout(&logical_device, pipeline_config.pipeline_layout, null);
 
-    const frag_bytes = @embedFile("shaders/simple_shader.frag.spv");
-    const frag_code = try allocator.alloc(u32, frag_bytes.len / 4);
-    defer allocator.free(frag_code);
-    for (frag_code, 0..) |*u, i| {
-        const j align(4) = [_]u8{ frag_bytes[i * 4], frag_bytes[(i * 4) + 1], frag_bytes[(i * 4) + 2], frag_bytes[(i * 4) + 3] };
-        u.* = @bitCast(j);
-    }
+    const frag_spv align(@alignOf(u32)) = @embedFile("shaders/simple_shader.frag.spv").*;
+    const vert_spv align(@alignOf(u32)) = @embedFile("shaders/simple_shader.vert.spv").*;
 
-    var frag_shader = try VulkanShaderModule.init(&logical_device, frag_code, null);
+    var frag_shader = try VulkanShaderModule.init(&logical_device, &frag_spv, null);
     defer frag_shader.deinit();
 
-    const vert_bytes = @embedFile("shaders/simple_shader.vert.spv");
-    const vert_code = try allocator.alloc(u32, frag_bytes.len / 4);
-    defer allocator.free(vert_code);
-    for (vert_code, 0..) |*u, i| {
-        const j align(4) = [_]u8{ vert_bytes[i * 4], vert_bytes[(i * 4) + 1], vert_bytes[(i * 4) + 2], vert_bytes[(i * 4) + 3] };
-        u.* = @bitCast(j);
-    }
-
-    var vert_shader = try VulkanShaderModule.init(&logical_device, vert_code, null);
+    var vert_shader = try VulkanShaderModule.init(&logical_device, &vert_spv, null);
     defer vert_shader.deinit();
 
     var pipeline = try VulkanPipeline.init(&logical_device, &pipeline_config, &frag_shader, &vert_shader, null);
