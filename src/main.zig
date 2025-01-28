@@ -1239,7 +1239,7 @@ pub fn main() !void {
 
         logical_device.dispatch.CmdPushConstants(command_buffer.handle, pipeline_layout, c.VK_SHADER_STAGE_FRAGMENT_BIT, 0, @sizeOf(PushConstantData), &push_constant_data);
 
-        logical_device.dispatch.CmdDraw(command_buffer.handle, 3, 1, 0, 0);
+        logical_device.dispatch.CmdDraw(command_buffer.handle, 6, 1, 0, 0);
 
         logical_device.dispatch.CmdEndRenderPass(command_buffer.handle);
 
