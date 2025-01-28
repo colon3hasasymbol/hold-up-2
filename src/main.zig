@@ -1183,11 +1183,33 @@ pub fn main() !void {
 
     window.show();
 
-    const push_constant_data = PushConstantData{
+    var push_constant_data = PushConstantData{
         .color = .{ 0.0, 0.0, 1.0 },
     };
 
-    for (command_buffers, swapchain.frame_buffers) |*command_buffer, frame_buffer| {
+    main_loop: while (true) {
+        var event: c.SDL_Event = undefined;
+        while (c.SDL_PollEvent(&event) == c.SDL_TRUE) {
+            switch (event.type) {
+                c.SDL_QUIT => {
+                    try logical_device.waitIdle();
+                    break :main_loop;
+                },
+                c.SDL_WINDOWEVENT => switch (event.window.event) {
+                    c.SDL_WINDOWEVENT_RESIZED => {
+                        swapchain.deinit();
+                        swapchain = try logical_device.createSwapchain(&surface, window.getExtent(), allocator, null);
+                    },
+                    else => {},
+                },
+                else => {},
+            }
+        }
+
+        const image_index = try swapchain.acquireNextImage();
+        var command_buffer = command_buffers[image_index];
+        const frame_buffer = swapchain.frame_buffers[image_index];
+
         try command_buffer.begin();
 
         const clear_values = [_]c.VkClearValue{
@@ -1213,7 +1235,7 @@ pub fn main() !void {
 
         logical_device.dispatch.CmdBeginRenderPass(command_buffer.handle, &render_pass_info, c.VK_SUBPASS_CONTENTS_INLINE);
 
-        pipeline.bind(command_buffer);
+        pipeline.bind(&command_buffer);
 
         logical_device.dispatch.CmdPushConstants(command_buffer.handle, pipeline_layout, c.VK_SHADER_STAGE_FRAGMENT_BIT, 0, @sizeOf(PushConstantData), &push_constant_data);
 
@@ -1222,28 +1244,9 @@ pub fn main() !void {
         logical_device.dispatch.CmdEndRenderPass(command_buffer.handle);
 
         try command_buffer.end();
-    }
 
-    main_loop: while (true) {
-        var event: c.SDL_Event = undefined;
-        while (c.SDL_PollEvent(&event) == c.SDL_TRUE) {
-            switch (event.type) {
-                c.SDL_QUIT => {
-                    try logical_device.waitIdle();
-                    break :main_loop;
-                },
-                c.SDL_WINDOWEVENT => switch (event.window.event) {
-                    c.SDL_WINDOWEVENT_RESIZED => {
-                        swapchain.deinit();
-                        swapchain = try logical_device.createSwapchain(&surface, window.getExtent(), allocator, null);
-                    },
-                    else => {},
-                },
-                else => {},
-            }
-        }
+        try swapchain.submitCommandBuffers(&command_buffer, image_index);
 
-        const image_index = try swapchain.acquireNextImage();
-        try swapchain.submitCommandBuffers(&command_buffers[image_index], image_index);
+        push_constant_data.color[1] = @mod((push_constant_data.color[1] + 0.005), @as(f32, 1.0));
     }
 }
