@@ -355,6 +355,11 @@ pub const VulkanLogicalDevice = struct {
         GetImageMemoryRequirements: std.meta.Child(c.PFN_vkGetImageMemoryRequirements) = undefined,
         CreateFramebuffer: std.meta.Child(c.PFN_vkCreateFramebuffer) = undefined,
         DestroyFramebuffer: std.meta.Child(c.PFN_vkDestroyFramebuffer) = undefined,
+        CmdBeginRenderPass: std.meta.Child(c.PFN_vkCmdBeginRenderPass) = undefined,
+        CmdEndRenderPass: std.meta.Child(c.PFN_vkCmdEndRenderPass) = undefined,
+        CmdBindPipeline: std.meta.Child(c.PFN_vkCmdBindPipeline) = undefined,
+        CmdDraw: std.meta.Child(c.PFN_vkCmdDraw) = undefined,
+        CmdPushConstants: std.meta.Child(c.PFN_vkCmdPushConstants) = undefined,
     };
 
     handle: c.VkDevice,
@@ -568,7 +573,6 @@ pub const VulkanSwapchain = struct {
                 break;
             }
         }
-        std.debug.print("Present mode: {s}\n", .{if (present_mode == c.VK_PRESENT_MODE_MAILBOX_KHR) "Mailbox" else "V-Sync"});
 
         var extent: c.VkExtent2D = undefined;
         if (swapchain_support.capabilities.currentExtent.width != std.math.maxInt(u32)) {
@@ -791,6 +795,8 @@ pub const VulkanSwapchain = struct {
     }
 
     pub fn deinit(self: *@This()) void {
+        self.allocator.free(self.images_in_flight);
+
         for (self.color_images) |*color_image| {
             color_image.deinit();
         }
@@ -806,6 +812,7 @@ pub const VulkanSwapchain = struct {
         for (self.frame_buffers) |frame_buffer| {
             self.device.dispatch.DestroyFramebuffer(self.device.handle, frame_buffer, self.allocation_callbacks);
         }
+        self.allocator.free(self.frame_buffers);
 
         self.device.dispatch.DestroyRenderPass(self.device.handle, self.render_pass, self.allocation_callbacks);
 
@@ -814,19 +821,22 @@ pub const VulkanSwapchain = struct {
             self.device.dispatch.DestroySemaphore(self.device.handle, render_semaphore, self.allocation_callbacks);
             self.device.dispatch.DestroyFence(self.device.handle, fence, self.allocation_callbacks);
         }
+        self.allocator.free(self.image_available_semaphores);
+        self.allocator.free(self.render_finished_semaphores);
+        self.allocator.free(self.in_flight_fences);
     }
 
     pub fn acquireNextImage(self: *@This()) !u32 {
-        self.device.dispatch.WaitForFences(self.device.handle, 1, &self.in_flight_fences[self.current_frame], c.VK_TRUE, std.math.maxInt(u64));
+        _ = self.device.dispatch.WaitForFences(self.device.handle, 1, &self.in_flight_fences[self.current_frame], c.VK_TRUE, std.math.maxInt(u64));
 
         var result: u32 = undefined;
-        if (self.device.dispatch.AcquireNextImageKHR(self.device.handle, self.handle, std.math.maxInt(u64), self.image_available_semaphores[self.current_frame], c.VK_NULL_HANDLE, &result) < 0) return error.VkAcquireNextImage;
+        if (self.device.dispatch.AcquireNextImageKHR(self.device.handle, self.handle, std.math.maxInt(u64), self.image_available_semaphores[self.current_frame], @ptrCast(c.VK_NULL_HANDLE), &result) < 0) return error.VkAcquireNextImage;
 
         return result;
     }
 
     pub fn submitCommandBuffers(self: *@This(), buffer: *VulkanCommandBuffer, image_index: u32) !void {
-        if (self.images_in_flight[image_index] != null) |image| self.device.dispatch.WaitForFences(self.device.handle, 1, &image.handle, c.VK_TRUE, std.math.maxInt(u64));
+        if (self.images_in_flight[image_index]) |fence| _ = self.device.dispatch.WaitForFences(self.device.handle, 1, &fence, c.VK_TRUE, std.math.maxInt(u64));
         self.images_in_flight[image_index] = self.in_flight_fences[self.current_frame];
 
         const wait_semaphore = self.image_available_semaphores[self.current_frame];
@@ -837,15 +847,15 @@ pub const VulkanSwapchain = struct {
             .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
             .waitSemaphoreCount = 1,
             .pWaitSemaphores = &wait_semaphore,
-            .pWaitDstStageMask = &wait_stage,
+            .pWaitDstStageMask = @ptrCast(&wait_stage),
             .commandBufferCount = 1,
             .pCommandBuffers = &buffer.handle,
             .signalSemaphoreCount = 1,
             .pSignalSemaphores = &signal_semaphore,
         });
 
-        self.device.dispatch.ResetFences(self.device.handle, 1, &self.in_flight_fences[self.current_frame]);
-        self.device.dispatch.QueueSubmit(self.device.graphics_queue, 1, &submit_info, self.in_flight_fences[self.current_frame]);
+        _ = self.device.dispatch.ResetFences(self.device.handle, 1, &self.in_flight_fences[self.current_frame]);
+        _ = self.device.dispatch.QueueSubmit(self.device.graphics_queue, 1, &submit_info, self.in_flight_fences[self.current_frame]);
 
         const present_info = std.mem.zeroInit(c.VkPresentInfoKHR, c.VkPresentInfoKHR{
             .sType = c.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
@@ -853,7 +863,7 @@ pub const VulkanSwapchain = struct {
             .pWaitSemaphores = &signal_semaphore,
             .swapchainCount = 1,
             .pSwapchains = &self.handle,
-            .pImageIndices = image_index,
+            .pImageIndices = &image_index,
         });
 
         if (self.device.dispatch.QueuePresentKHR(self.device.present_queue, &present_info) < 0) return error.VkQueuePresent;
@@ -890,10 +900,10 @@ pub const VulkanCommandPool = struct {
         self.device.dispatch.DestroyCommandPool(self.device.handle, self.handle, self.allocation_callbacks);
     }
 
-    pub fn allocate(self: *@This(), count: u32, allocator: std.mem.Allocator) ![]VulkanCommandBuffer {
+    pub fn allocate(self: *@This(), count: u64, allocator: std.mem.Allocator) ![]VulkanCommandBuffer {
         const allocate_info = std.mem.zeroInit(c.VkCommandBufferAllocateInfo, c.VkCommandBufferAllocateInfo{
             .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-            .commandBufferCount = count,
+            .commandBufferCount = @intCast(count),
             .commandPool = self.handle,
             .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
         });
@@ -980,8 +990,6 @@ pub const VulkanPipeline = struct {
             .maxDepth = 1.0,
         });
 
-        std.debug.print("{}, {}\n", .{ viewport.width, viewport.height });
-
         const scissor = std.mem.zeroInit(c.VkRect2D, c.VkRect2D{
             .offset = std.mem.zeroes(c.VkOffset2D),
             .extent = .{ .width = extent.width, .height = extent.height },
@@ -1011,7 +1019,6 @@ pub const VulkanPipeline = struct {
             .sampleShadingEnable = c.VK_FALSE,
             .rasterizationSamples = c.VK_SAMPLE_COUNT_1_BIT,
         });
-        _ = multisample_info;
 
         const color_blend_attachment = std.mem.zeroInit(c.VkPipelineColorBlendAttachmentState, c.VkPipelineColorBlendAttachmentState{
             .colorWriteMask = c.VK_COLOR_COMPONENT_R_BIT | c.VK_COLOR_COMPONENT_G_BIT | c.VK_COLOR_COMPONENT_B_BIT | c.VK_COLOR_COMPONENT_A_BIT,
@@ -1027,7 +1034,7 @@ pub const VulkanPipeline = struct {
 
         const depth_stencil_info = std.mem.zeroInit(c.VkPipelineDepthStencilStateCreateInfo, c.VkPipelineDepthStencilStateCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-            .depthTestEnable = c.VK_TRUE,
+            .depthTestEnable = c.VK_FALSE,
             .depthWriteEnable = c.VK_TRUE,
             .depthCompareOp = c.VK_COMPARE_OP_LESS,
             .depthBoundsTestEnable = c.VK_FALSE,
@@ -1066,12 +1073,10 @@ pub const VulkanPipeline = struct {
             .subpass = 0,
             .basePipelineIndex = -1,
             .basePipelineHandle = @ptrCast(c.VK_NULL_HANDLE),
+            .pMultisampleState = &multisample_info,
         });
 
-        std.debug.print("{d}, {d}\n", .{ @as(u32, @intFromFloat(create_info.pViewportState.*.pViewports.*.width)), @as(u32, @intFromFloat(create_info.pViewportState.*.pViewports.*.height)) });
-
         var handle: c.VkPipeline = undefined;
-        std.debug.print("{any}\n", .{device.dispatch.CreateGraphicsPipelines});
         if (device.dispatch.CreateGraphicsPipelines(device.handle, @ptrCast(c.VK_NULL_HANDLE), 1, &create_info, allocation_callbacks, &handle) < 0) return error.VkCreateGraphicsPipelines;
 
         return .{
@@ -1087,9 +1092,17 @@ pub const VulkanPipeline = struct {
         self.device.dispatch.DestroyPipeline(self.device.handle, self.handle, self.allocation_callbacks);
     }
 
-    pub fn createLayout(device: *const VulkanLogicalDevice, allocation_callbacks: ?*c.VkAllocationCallbacks) !c.VkPipelineLayout {
+    pub fn createLayout(device: *const VulkanLogicalDevice, PushConstantData: type, allocation_callbacks: ?*c.VkAllocationCallbacks) !c.VkPipelineLayout {
+        const push_constant_range = std.mem.zeroInit(c.VkPushConstantRange, c.VkPushConstantRange{
+            .stageFlags = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+            .offset = 0,
+            .size = @sizeOf(PushConstantData),
+        });
+
         const create_info = std.mem.zeroInit(c.VkPipelineLayoutCreateInfo, c.VkPipelineLayoutCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+            .pushConstantRangeCount = 1,
+            .pPushConstantRanges = &push_constant_range,
         });
 
         var result: c.VkPipelineLayout = undefined;
@@ -1100,6 +1113,10 @@ pub const VulkanPipeline = struct {
 
     pub fn destroyLayout(device: *const VulkanLogicalDevice, layout: c.VkPipelineLayout, allocation_callbacks: ?*c.VkAllocationCallbacks) void {
         device.dispatch.DestroyPipelineLayout(device.handle, layout, allocation_callbacks);
+    }
+
+    pub fn bind(self: *@This(), command_buffer: *VulkanCommandBuffer) void {
+        self.device.dispatch.CmdBindPipeline(command_buffer.handle, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.handle);
     }
 };
 
@@ -1140,13 +1157,16 @@ pub fn main() !void {
     var command_pool = try logical_device.createCommandPool(physical_device.graphics_queue_family_index, allocator, null);
     defer command_pool.deinit();
 
-    const command_buffers = try command_pool.allocate(1, allocator);
+    const command_buffers = try command_pool.allocate(swapchain.color_images.len, allocator);
     defer allocator.free(command_buffers);
 
     const window_extent = window.getExtent();
-    std.debug.print("{any}\n", .{window_extent});
 
-    const pipeline_layout = try VulkanPipeline.createLayout(&logical_device, null);
+    const PushConstantData = struct {
+        color: @Vector(3, f32),
+    };
+
+    const pipeline_layout = try VulkanPipeline.createLayout(&logical_device, PushConstantData, null);
     defer VulkanPipeline.destroyLayout(&logical_device, pipeline_layout, null);
 
     const frag_spv align(@alignOf(u32)) = @embedFile("shaders/simple_shader.frag.spv").*;
@@ -1161,12 +1181,48 @@ pub fn main() !void {
     var pipeline = try VulkanPipeline.init(&logical_device, pipeline_layout, swapchain.render_pass, &frag_shader, &vert_shader, window_extent, null);
     defer pipeline.deinit();
 
-    std.debug.print("{d}\n{s}\n", .{
-        @intFromPtr(swapchain.handle),
-        physical_device.getProperties().deviceName,
-    });
-
     window.show();
+
+    const push_constant_data = PushConstantData{
+        .color = .{ 0.0, 0.0, 1.0 },
+    };
+
+    for (command_buffers, swapchain.frame_buffers) |*command_buffer, frame_buffer| {
+        try command_buffer.begin();
+
+        const clear_values = [_]c.VkClearValue{
+            c.VkClearValue{
+                .color = c.VkClearColorValue{ .float32 = .{ 1.0, 0.0, 0.0, 1.0 } },
+            },
+            c.VkClearValue{
+                .depthStencil = c.VkClearDepthStencilValue{ .depth = 0.0, .stencil = 0 },
+            },
+        };
+
+        const render_pass_info = std.mem.zeroInit(c.VkRenderPassBeginInfo, c.VkRenderPassBeginInfo{
+            .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .renderPass = swapchain.render_pass,
+            .framebuffer = frame_buffer,
+            .renderArea = c.VkRect2D{
+                .offset = c.VkOffset2D{ .x = 0, .y = 0 },
+                .extent = window_extent,
+            },
+            .clearValueCount = @intCast(clear_values.len),
+            .pClearValues = &clear_values,
+        });
+
+        logical_device.dispatch.CmdBeginRenderPass(command_buffer.handle, &render_pass_info, c.VK_SUBPASS_CONTENTS_INLINE);
+
+        pipeline.bind(command_buffer);
+
+        logical_device.dispatch.CmdPushConstants(command_buffer.handle, pipeline_layout, c.VK_SHADER_STAGE_FRAGMENT_BIT, 0, @sizeOf(PushConstantData), &push_constant_data);
+
+        logical_device.dispatch.CmdDraw(command_buffer.handle, 3, 1, 0, 0);
+
+        logical_device.dispatch.CmdEndRenderPass(command_buffer.handle);
+
+        try command_buffer.end();
+    }
 
     main_loop: while (true) {
         var event: c.SDL_Event = undefined;
@@ -1186,5 +1242,8 @@ pub fn main() !void {
                 else => {},
             }
         }
+
+        const image_index = try swapchain.acquireNextImage();
+        try swapchain.submitCommandBuffers(&command_buffers[image_index], image_index);
     }
 }
