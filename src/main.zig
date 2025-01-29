@@ -1184,7 +1184,7 @@ pub fn main() !void {
     window.show();
 
     var push_constant_data = PushConstantData{
-        .color = .{ 0.0, 0.0, 1.0 },
+        .color = .{ 0.0, 0.0, 0.0 },
     };
 
     main_loop: while (true) {
@@ -1247,6 +1247,6 @@ pub fn main() !void {
 
         try swapchain.submitCommandBuffers(&command_buffer, image_index);
 
-        push_constant_data.color[1] = @mod((push_constant_data.color[1] + 0.005), @as(f32, 1.0));
+        push_constant_data.color[0] = @mod((push_constant_data.color[0] - 0.05), @as(f32, 1.0));
     }
 }
