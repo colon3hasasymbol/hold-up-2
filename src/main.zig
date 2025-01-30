@@ -1,4 +1,5 @@
 const std = @import("std");
+const zmath = @import("zmath");
 const c = @cImport({
     @cDefine("VK_NO_PROTOTYPES", {});
     @cInclude("vulkan/vulkan.h");
@@ -1163,7 +1164,9 @@ pub fn main() !void {
     const window_extent = window.getExtent();
 
     const PushConstantData = struct {
-        color: @Vector(3, f32),
+        inverse_pv: zmath.Mat,
+        near_plane: f32,
+        far_plane: f32,
     };
 
     const pipeline_layout = try VulkanPipeline.createLayout(&logical_device, PushConstantData, null);
