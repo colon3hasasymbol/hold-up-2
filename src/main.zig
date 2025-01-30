@@ -50,7 +50,7 @@ pub const VulkanWindow = struct {
     handle: ?*c.SDL_Window,
 
     pub fn init(title: [*c]const u8) !@This() {
-        const handle = c.SDL_CreateWindow(title, c.SDL_WINDOWPOS_UNDEFINED, c.SDL_WINDOWPOS_UNDEFINED, 800, 600, c.SDL_WINDOW_VULKAN | c.SDL_WINDOW_HIDDEN | c.SDL_WINDOW_RESIZABLE);
+        const handle = c.SDL_CreateWindow(title, c.SDL_WINDOWPOS_UNDEFINED, c.SDL_WINDOWPOS_UNDEFINED, 800, 800, c.SDL_WINDOW_VULKAN | c.SDL_WINDOW_HIDDEN | c.SDL_WINDOW_RESIZABLE);
         if (handle == null) {
             c.SDL_LogError(c.SDL_LOG_CATEGORY_APPLICATION, "%s", c.SDL_GetError());
             return error.SDLCreateWindow;
@@ -1095,7 +1095,7 @@ pub const VulkanPipeline = struct {
 
     pub fn createLayout(device: *const VulkanLogicalDevice, PushConstantData: type, allocation_callbacks: ?*c.VkAllocationCallbacks) !c.VkPipelineLayout {
         const push_constant_range = std.mem.zeroInit(c.VkPushConstantRange, c.VkPushConstantRange{
-            .stageFlags = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+            .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
             .offset = 0,
             .size = @sizeOf(PushConstantData),
         });
@@ -1164,7 +1164,7 @@ pub fn main() !void {
     const window_extent = window.getExtent();
 
     const PushConstantData = struct {
-        inverse_pv: zmath.Mat,
+        inverse_vp: zmath.Mat,
         near_plane: f32,
         far_plane: f32,
     };
@@ -1187,7 +1187,9 @@ pub fn main() !void {
     window.show();
 
     var push_constant_data = PushConstantData{
-        .color = .{ 0.0, 0.0, 0.0 },
+        .inverse_vp = zmath.perspectiveFovLh(90.0, 1.0, 1.0, 100.0),
+        .near_plane = 1.0,
+        .far_plane = 100.0,
     };
 
     main_loop: while (true) {
@@ -1240,7 +1242,7 @@ pub fn main() !void {
 
         pipeline.bind(&command_buffer);
 
-        logical_device.dispatch.CmdPushConstants(command_buffer.handle, pipeline_layout, c.VK_SHADER_STAGE_FRAGMENT_BIT, 0, @sizeOf(PushConstantData), &push_constant_data);
+        logical_device.dispatch.CmdPushConstants(command_buffer.handle, pipeline_layout, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(PushConstantData), &push_constant_data);
 
         logical_device.dispatch.CmdDraw(command_buffer.handle, 6, 1, 0, 0);
 
@@ -1249,7 +1251,5 @@ pub fn main() !void {
         try command_buffer.end();
 
         try swapchain.submitCommandBuffers(&command_buffer, image_index);
-
-        push_constant_data.color[0] = @mod((push_constant_data.color[0] - 0.05), @as(f32, 1.0));
     }
 }
