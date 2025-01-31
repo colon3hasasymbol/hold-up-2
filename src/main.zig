@@ -1186,8 +1186,26 @@ pub fn main() !void {
 
     window.show();
 
+    const Keyboard = struct {
+        w: bool,
+        a: bool,
+        s: bool,
+        d: bool,
+        space: bool,
+        lshift: bool,
+        up: bool,
+        down: bool,
+        right: bool,
+        left: bool,
+    };
+
+    var keyboard = std.mem.zeroes(Keyboard);
+
+    var camera_position: @Vector(3, f32) = .{ 0.0, 0.0, 0.0 };
+    var camera_rotation: @Vector(3, f32) = .{ 0.0, 0.0, 0.0 };
+
     var push_constant_data = PushConstantData{
-        .inverse_vp = zmath.perspectiveFovLh(90.0, 1.0, 1.0, 100.0),
+        .inverse_vp = zmath.inverse(zmath.perspectiveFovLh(90.0, 1.0, 1.0, 100.0)),
         .near_plane = 1.0,
         .far_plane = 100.0,
     };
@@ -1207,9 +1225,59 @@ pub fn main() !void {
                     },
                     else => {},
                 },
+                c.SDL_KEYUP => {
+                    switch (event.key.keysym.sym) {
+                        c.SDLK_w => keyboard.w = false,
+                        c.SDLK_a => keyboard.a = false,
+                        c.SDLK_s => keyboard.s = false,
+                        c.SDLK_d => keyboard.d = false,
+                        c.SDLK_SPACE => keyboard.space = false,
+                        c.SDLK_LSHIFT => keyboard.lshift = false,
+                        c.SDLK_UP => keyboard.up = false,
+                        c.SDLK_DOWN => keyboard.down = false,
+                        c.SDLK_RIGHT => keyboard.right = false,
+                        c.SDLK_LEFT => keyboard.left = false,
+
+                        else => {},
+                    }
+                },
+                c.SDL_KEYDOWN => {
+                    switch (event.key.keysym.sym) {
+                        c.SDLK_w => keyboard.w = true,
+                        c.SDLK_a => keyboard.a = true,
+                        c.SDLK_s => keyboard.s = true,
+                        c.SDLK_d => keyboard.d = true,
+                        c.SDLK_SPACE => keyboard.space = true,
+                        c.SDLK_LSHIFT => keyboard.lshift = true,
+                        c.SDLK_UP => keyboard.up = true,
+                        c.SDLK_DOWN => keyboard.down = true,
+                        c.SDLK_RIGHT => keyboard.right = true,
+                        c.SDLK_LEFT => keyboard.left = true,
+
+                        else => {},
+                    }
+                },
                 else => {},
             }
         }
+
+        if (keyboard.w) camera_position[2] -= 0.1;
+        if (keyboard.s) camera_position[2] += 0.1;
+        if (keyboard.d) camera_position[0] -= 0.1;
+        if (keyboard.a) camera_position[0] += 0.1;
+        if (keyboard.lshift) camera_position[1] -= 0.1;
+        if (keyboard.space) camera_position[1] += 0.1;
+
+        if (keyboard.up) camera_rotation[0] -= 0.01;
+        if (keyboard.down) camera_rotation[0] += 0.01;
+        if (keyboard.right) camera_rotation[1] -= 0.01;
+        if (keyboard.left) camera_rotation[1] += 0.01;
+
+        push_constant_data.inverse_vp = zmath.translation(camera_position[0], camera_position[1], camera_position[2]);
+        push_constant_data.inverse_vp = zmath.mul(push_constant_data.inverse_vp, zmath.rotationY(camera_rotation[1]));
+        push_constant_data.inverse_vp = zmath.mul(push_constant_data.inverse_vp, zmath.rotationX(camera_rotation[0]));
+        push_constant_data.inverse_vp = zmath.mul(push_constant_data.inverse_vp, zmath.perspectiveFovLh(90.0, 1.0, 1.0, 100.0));
+        push_constant_data.inverse_vp = zmath.inverse(push_constant_data.inverse_vp);
 
         const image_index = try swapchain.acquireNextImage();
         var command_buffer = command_buffers[image_index];

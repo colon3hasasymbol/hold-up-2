@@ -8,16 +8,29 @@ layout(location = 0) out vec4 outColor;
 const vec3 LIGHT_COLOR = vec3(1.0, 1.0, 1.0);
 const vec3 LIGHT_LOCATION = vec3(2.5, 2.5, -1.0);
 
-float sphereSDF(vec3 p) {
-    return length(p - vec3(0.0, 0.0, -10.0)) - 1.0;
+float sphereSDF(vec3 p, vec3 n, float r) {
+    return length(p - n) - r;
+}
+
+float planeSDF(vec3 p, vec3 n, float h) {
+    return dot(p, n) + h;
+}
+
+float cubeSDF(vec3 p, vec3 b) {
+    vec3 q = abs(p) - b;
+    return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
+}
+
+float sceneSDF(vec3 p) {
+    return min(sphereSDF(p, vec3(0.0, 0.0, 10.0), 1.0), cubeSDF(p - vec3(0.0, -5.0, 0.0), vec3(1.0, 1.0, 1.0)));
 }
 
 vec3 calcNormal(vec3 pos) {
     vec3 eps = vec3(0.005, 0.0, 0.0);
     return normalize(vec3(
-            sphereSDF(pos + eps.xyy) - sphereSDF(pos - eps.xyy),
-            sphereSDF(pos + eps.yxy) - sphereSDF(pos - eps.yxy),
-            sphereSDF(pos + eps.yyx) - sphereSDF(pos - eps.yyx)
+            sceneSDF(pos + eps.xyy) - sceneSDF(pos - eps.xyy),
+            sceneSDF(pos + eps.yxy) - sceneSDF(pos - eps.yxy),
+            sceneSDF(pos + eps.yyx) - sceneSDF(pos - eps.yyx)
         ));
 }
 
@@ -28,7 +41,7 @@ void main() {
 
     vec3 p = ray_origin;
     for (int i = 0; i < 50; i++) {
-        float dist = sphereSDF(p);
+        float dist = sceneSDF(p);
         if (dist < 0.001) {
             vec3 normal = calcNormal(p);
             float light_strength = max(0.0, dot(normalize(LIGHT_LOCATION), normal));
