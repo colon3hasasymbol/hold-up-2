@@ -1222,7 +1222,7 @@ pub const VulkanModel = struct {
                     .binding = 0,
                     .format = c.VK_FORMAT_R32G32_SFLOAT,
                     .location = 1,
-                    .offset = @sizeOf(f32) * 3,
+                    .offset = @offsetOf(@This(), "uv"),
                 },
             });
         }
@@ -1525,16 +1525,16 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
     const vertices = [_]VulkanModel.Vertex{
         VulkanModel.Vertex{
-            .position = .{ 0.0, -0.5, 0.0 },
-            .uv = .{ 0.0, 0.0 },
+            .position = .{ 0.0, -0.5, 0.5 },
+            .uv = .{ 0.0, 1.0 },
         },
         VulkanModel.Vertex{
-            .position = .{ 0.5, 0.5, 0.0 },
-            .uv = .{ 0.0, 0.0 },
+            .position = .{ 0.5, 0.5, 0.5 },
+            .uv = .{ 1.0, 0.0 },
         },
         VulkanModel.Vertex{
-            .position = .{ -0.5, 0.5, 0.0 },
-            .uv = .{ 0.0, 0.0 },
+            .position = .{ -0.5, 0.5, 0.5 },
+            .uv = .{ 1.0, 1.0 },
         },
     };
 
@@ -1559,7 +1559,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     var camera_rotation: @Vector(3, f32) = .{ 0.0, 0.0, 0.0 };
 
     var push_constant_data = PushConstantData{
-        .vp = zmath.perspectiveFovLh(90.0, 1.0, 1.0, 100.0),
+        .vp = zmath.identity(),
     };
 
     main_loop: while (true) {
@@ -1625,11 +1625,30 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
         if (keyboard.right) camera_rotation[1] -= 0.01;
         if (keyboard.left) camera_rotation[1] += 0.01;
 
-        push_constant_data.vp = zmath.translation(camera_position[0], camera_position[1], camera_position[2]);
-        push_constant_data.vp = zmath.mul(push_constant_data.vp, zmath.rotationY(camera_rotation[1]));
-        push_constant_data.vp = zmath.mul(push_constant_data.vp, zmath.rotationX(camera_rotation[0]));
-        push_constant_data.vp = zmath.mul(push_constant_data.vp, zmath.perspectiveFovLh(90.0, 1.0, 1.0, 100.0));
+        // push_constant_data.view = zmath.translation(camera_position[0], camera_position[1], camera_position[2]);
+        // push_constant_data.view = zmath.mul(push_constant_data.view, zmath.rotationY(camera_rotation[1]));
+        // push_constant_data.view = zmath.mul(push_constant_data.view, zmath.rotationX(camera_rotation[0]));
+        // push_constant_data.proj = zmath.perspectiveFovLh(90.0, 1.0, 1.0, 100.0);
         // push_constant_data.vp = zmath.inverse(push_constant_data.vp);
+
+        // push_constant_data.view = zmath.lookToLh(.{ camera_position[0], camera_position[1], camera_position[2], 0.0 }, .{ camera_rotation[0], camera_rotation[1], camera_rotation[2], 0.0 }, .{ 0.0, 1.0, 0.0, 0.0 });
+        // push_constant_data.proj = zmath.perspectiveFovLh(3.14 / 4.0, 1.0, 0.01, 100.0);
+
+        // const world_to_view = zmath.lookAtRh(
+        //     zmath.f32x4(camera_position[0], camera_position[1], camera_position[2], 1.0), // eye position
+        //     zmath.f32x4(camera_position[0], camera_position[1], camera_position[2] + 0.1, 1.0), // focus point
+        //     zmath.f32x4(0.0, 1.0, 0.0, 0.0), // up direction ('w' coord is zero because this is a vector not a point)
+        // );
+        // `perspectiveFovRhGl` produces Z values in [-1.0, 1.0] range (Vulkan app should use `perspectiveFovRh`)
+
+        var world_to_view = zmath.inverse(zmath.translation(camera_position[0], camera_position[1], camera_position[2]));
+        world_to_view = zmath.mul(world_to_view, zmath.mul(zmath.rotationX(camera_rotation[0]), zmath.rotationY(camera_rotation[1])));
+
+        const view_to_clip = zmath.perspectiveFovRh(0.25 * std.math.pi, 1, 0.1, 20.0);
+
+        const world_to_clip = zmath.mul(world_to_view, view_to_clip);
+
+        push_constant_data.vp = world_to_clip;
 
         const image_index = try swapchain.acquireNextImage();
         var command_buffer = command_buffers[image_index];
