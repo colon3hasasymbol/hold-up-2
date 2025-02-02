@@ -361,6 +361,13 @@ pub const VulkanLogicalDevice = struct {
         CmdBindPipeline: std.meta.Child(c.PFN_vkCmdBindPipeline) = undefined,
         CmdDraw: std.meta.Child(c.PFN_vkCmdDraw) = undefined,
         CmdPushConstants: std.meta.Child(c.PFN_vkCmdPushConstants) = undefined,
+        CreateBuffer: std.meta.Child(c.PFN_vkCreateBuffer) = undefined,
+        DestroyBuffer: std.meta.Child(c.PFN_vkDestroyBuffer) = undefined,
+        BindBufferMemory: std.meta.Child(c.PFN_vkBindBufferMemory) = undefined,
+        GetBufferMemoryRequirements: std.meta.Child(c.PFN_vkGetBufferMemoryRequirements) = undefined,
+        MapMemory: std.meta.Child(c.PFN_vkMapMemory) = undefined,
+        UnmapMemory: std.meta.Child(c.PFN_vkUnmapMemory) = undefined,
+        CmdBindVertexBuffers: std.meta.Child(c.PFN_vkCmdBindVertexBuffers) = undefined,
     };
 
     handle: c.VkDevice,
@@ -536,6 +543,55 @@ pub const VulkanImage = struct {
         self.memory = try self.device.allocateMemory(properties, requirements, self.allocation_callbacks);
 
         if (self.device.dispatch.BindImageMemory(self.device.handle, self.handle, self.memory, 0) < 0) return error.VkBindImageMemory;
+    }
+};
+
+pub const VulkanBuffer = struct {
+    handle: c.VkBuffer,
+    memory: c.VkDeviceMemory,
+    memory_size: c.VkDeviceSize,
+    device: *const VulkanLogicalDevice,
+    allocation_callbacks: ?*c.VkAllocationCallbacks,
+
+    pub fn init(device: *const VulkanLogicalDevice, size: c.VkDeviceSize, usage: c.VkBufferUsageFlags, allocation_callbacks: ?*c.VkAllocationCallbacks) !@This() {
+        const create_info = std.mem.zeroInit(c.VkBufferCreateInfo, c.VkBufferCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+            .size = size,
+            .usage = usage,
+            .sharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
+        });
+
+        var handle: c.VkBuffer = undefined;
+        if (device.dispatch.CreateBuffer(device.handle, &create_info, allocation_callbacks, &handle) < 0) return error.VkCreateBuffer;
+
+        return .{
+            .handle = handle,
+            .memory = null,
+            .memory_size = size,
+            .device = device,
+            .allocation_callbacks = allocation_callbacks,
+        };
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.device.dispatch.DestroyBuffer(self.device.handle, self.handle, self.allocation_callbacks);
+        if (self.memory != null) self.device.freeMemory(self.memory, self.allocation_callbacks);
+    }
+
+    pub fn createMemory(self: *@This(), properties: c.VkMemoryPropertyFlags) !void {
+        var requirements: c.VkMemoryRequirements = undefined;
+        self.device.dispatch.GetBufferMemoryRequirements(self.device.handle, self.handle, &requirements);
+
+        self.memory = try self.device.allocateMemory(properties, requirements, self.allocation_callbacks);
+
+        if (self.device.dispatch.BindBufferMemory(self.device.handle, self.handle, self.memory, 0) < 0) return error.VkBindBufferMemory;
+    }
+
+    pub fn uploadData(self: *@This(), data: anytype) !void {
+        var mapped: *anyopaque = undefined;
+        if (self.device.dispatch.MapMemory(self.device.handle, self.memory, 0, self.memory_size, 0, @ptrCast(&mapped)) < 0) return error.VkMapMemory;
+        @memcpy(@as([*]u8, @ptrCast(mapped)), @as([*]u8, @ptrCast(@constCast(data.ptr)))[0 .. data.len * @sizeOf(@TypeOf(data[0]))]);
+        self.device.dispatch.UnmapMemory(self.device.handle, self.memory);
     }
 };
 
@@ -987,7 +1043,7 @@ pub const VulkanPipeline = struct {
     vert_shader: *const VulkanShaderModule,
     allocation_callbacks: ?*c.VkAllocationCallbacks,
 
-    pub fn init(device: *const VulkanLogicalDevice, pipeline_layout: c.VkPipelineLayout, render_pass: c.VkRenderPass, frag_shader: *const VulkanShaderModule, vert_shader: *const VulkanShaderModule, extent: c.VkExtent2D, allocation_callbacks: ?*c.VkAllocationCallbacks) !@This() {
+    pub fn init(device: *const VulkanLogicalDevice, pipeline_layout: c.VkPipelineLayout, render_pass: c.VkRenderPass, frag_shader: *const VulkanShaderModule, vert_shader: *const VulkanShaderModule, extent: c.VkExtent2D, attribute_descriptions: []c.VkVertexInputAttributeDescription, binding_descriptions: []c.VkVertexInputBindingDescription, allocation_callbacks: ?*c.VkAllocationCallbacks) !@This() {
         const input_assembly_info = std.mem.zeroInit(c.VkPipelineInputAssemblyStateCreateInfo, c.VkPipelineInputAssemblyStateCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
             .topology = c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
@@ -1068,7 +1124,13 @@ pub const VulkanPipeline = struct {
             }),
         };
 
-        const vertex_input_info = std.mem.zeroInit(c.VkPipelineVertexInputStateCreateInfo, c.VkPipelineVertexInputStateCreateInfo{ .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO });
+        const vertex_input_info = std.mem.zeroInit(c.VkPipelineVertexInputStateCreateInfo, c.VkPipelineVertexInputStateCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+            .vertexAttributeDescriptionCount = @intCast(attribute_descriptions.len),
+            .pVertexAttributeDescriptions = attribute_descriptions.ptr,
+            .vertexBindingDescriptionCount = @intCast(binding_descriptions.len),
+            .pVertexBindingDescriptions = binding_descriptions.ptr,
+        });
 
         const create_info = std.mem.zeroInit(c.VkGraphicsPipelineCreateInfo, c.VkGraphicsPipelineCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
@@ -1134,13 +1196,75 @@ pub const VulkanPipeline = struct {
 };
 
 pub const VulkanModel = struct {
-    vertex_buffer: c.VkBuffer,
-    vertex_memory: c.VkDeviceMemory,
+    pub const Vertex = struct {
+        position: @Vector(3, f32),
+        uv: @Vector(2, f32),
+
+        pub fn getBindingDescriptions() []c.VkVertexInputBindingDescription {
+            return @constCast(&[_]c.VkVertexInputBindingDescription{
+                c.VkVertexInputBindingDescription{
+                    .binding = 0,
+                    .stride = @sizeOf(@This()),
+                    .inputRate = c.VK_VERTEX_INPUT_RATE_VERTEX,
+                },
+            });
+        }
+
+        pub fn getAttributeDescriptions() []c.VkVertexInputAttributeDescription {
+            return @constCast(&[_]c.VkVertexInputAttributeDescription{
+                c.VkVertexInputAttributeDescription{
+                    .binding = 0,
+                    .format = c.VK_FORMAT_R32G32B32_SFLOAT,
+                    .location = 0,
+                    .offset = 0,
+                },
+                c.VkVertexInputAttributeDescription{
+                    .binding = 0,
+                    .format = c.VK_FORMAT_R32G32_SFLOAT,
+                    .location = 1,
+                    .offset = @sizeOf(f32) * 3,
+                },
+            });
+        }
+    };
+
+    vertex_buffer: VulkanBuffer,
     vertex_count: u32,
     device: *const VulkanLogicalDevice,
+    allocation_callbacks: ?*c.VkAllocationCallbacks,
 
-    pub fn bind(self: *@This(), command_buffer: *VulkanCommandBuffer) void {}
-    pub fn draw(self: *@This(), command_buffer: *VulkanCommandBuffer) void {}
+    pub fn init(device: *const VulkanLogicalDevice, vertices: []const Vertex, allocation_callbacks: ?*c.VkAllocationCallbacks) !@This() {
+        const vertex_count: u32 = @intCast(vertices.len);
+
+        const vertex_buffer_size: c.VkDeviceSize = @sizeOf(@TypeOf(vertices[0])) * vertex_count;
+
+        var vertex_buffer = try VulkanBuffer.init(device, vertex_buffer_size, c.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, allocation_callbacks);
+        try vertex_buffer.createMemory(c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        try vertex_buffer.uploadData(vertices);
+
+        return .{
+            .vertex_buffer = vertex_buffer,
+            .vertex_count = vertex_count,
+            .device = device,
+            .allocation_callbacks = allocation_callbacks,
+        };
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.device.dispatch.DestroyBuffer(self.device.handle, self.vertex_buffer, self.allocation_callbacks);
+        self.device.freeMemory(self.vertex_memory, self.allocation_callbacks);
+    }
+
+    pub fn bind(self: *@This(), command_buffer: *VulkanCommandBuffer) void {
+        const buffers = [_]c.VkBuffer{self.vertex_buffer.handle};
+        const offsets = [_]c.VkDeviceSize{0};
+
+        self.device.dispatch.CmdBindVertexBuffers(command_buffer.handle, 0, 1, &buffers, &offsets);
+    }
+
+    pub fn draw(self: *@This(), command_buffer: *VulkanCommandBuffer) void {
+        self.device.dispatch.CmdDraw(command_buffer.handle, self.vertex_count, 1, 0, 0);
+    }
 };
 
 pub fn raymarch(allocator: std.mem.Allocator) !void {
@@ -1199,7 +1323,7 @@ pub fn raymarch(allocator: std.mem.Allocator) !void {
     var vert_shader = try VulkanShaderModule.init(&logical_device, &vert_spv, null);
     defer vert_shader.deinit();
 
-    var pipeline = try VulkanPipeline.init(&logical_device, pipeline_layout, swapchain.render_pass, &frag_shader, &vert_shader, window_extent, null);
+    var pipeline = try VulkanPipeline.init(&logical_device, pipeline_layout, swapchain.render_pass, &frag_shader, &vert_shader, window_extent, &[_]c.VkVertexInputAttributeDescription{}, &[_]c.VkVertexInputBindingDescription{}, null);
     defer pipeline.deinit();
 
     window.show();
@@ -1379,9 +1503,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     const window_extent = window.getExtent();
 
     const PushConstantData = struct {
-        inverse_vp: zmath.Mat,
-        near_plane: f32,
-        far_plane: f32,
+        vp: zmath.Mat,
     };
 
     const pipeline_layout = try VulkanPipeline.createLayout(&logical_device, PushConstantData, null);
@@ -1396,10 +1518,27 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     var vert_shader = try VulkanShaderModule.init(&logical_device, &vert_spv, null);
     defer vert_shader.deinit();
 
-    var pipeline = try VulkanPipeline.init(&logical_device, pipeline_layout, swapchain.render_pass, &frag_shader, &vert_shader, window_extent, null);
+    var pipeline = try VulkanPipeline.init(&logical_device, pipeline_layout, swapchain.render_pass, &frag_shader, &vert_shader, window_extent, VulkanModel.Vertex.getAttributeDescriptions(), VulkanModel.Vertex.getBindingDescriptions(), null);
     defer pipeline.deinit();
 
     window.show();
+
+    const vertices = [_]VulkanModel.Vertex{
+        VulkanModel.Vertex{
+            .position = .{ 0.0, -0.5, 0.0 },
+            .uv = .{ 0.0, 0.0 },
+        },
+        VulkanModel.Vertex{
+            .position = .{ 0.5, 0.5, 0.0 },
+            .uv = .{ 0.0, 0.0 },
+        },
+        VulkanModel.Vertex{
+            .position = .{ -0.5, 0.5, 0.0 },
+            .uv = .{ 0.0, 0.0 },
+        },
+    };
+
+    var model = try VulkanModel.init(&logical_device, &vertices, null);
 
     const Keyboard = struct {
         w: bool,
@@ -1420,9 +1559,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     var camera_rotation: @Vector(3, f32) = .{ 0.0, 0.0, 0.0 };
 
     var push_constant_data = PushConstantData{
-        .inverse_vp = zmath.inverse(zmath.perspectiveFovLh(90.0, 1.0, 1.0, 100.0)),
-        .near_plane = 1.0,
-        .far_plane = 100.0,
+        .vp = zmath.perspectiveFovLh(90.0, 1.0, 1.0, 100.0),
     };
 
     main_loop: while (true) {
@@ -1488,11 +1625,11 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
         if (keyboard.right) camera_rotation[1] -= 0.01;
         if (keyboard.left) camera_rotation[1] += 0.01;
 
-        push_constant_data.inverse_vp = zmath.translation(camera_position[0], camera_position[1], camera_position[2]);
-        push_constant_data.inverse_vp = zmath.mul(push_constant_data.inverse_vp, zmath.rotationY(camera_rotation[1]));
-        push_constant_data.inverse_vp = zmath.mul(push_constant_data.inverse_vp, zmath.rotationX(camera_rotation[0]));
-        push_constant_data.inverse_vp = zmath.mul(push_constant_data.inverse_vp, zmath.perspectiveFovLh(90.0, 1.0, 1.0, 100.0));
-        push_constant_data.inverse_vp = zmath.inverse(push_constant_data.inverse_vp);
+        push_constant_data.vp = zmath.translation(camera_position[0], camera_position[1], camera_position[2]);
+        push_constant_data.vp = zmath.mul(push_constant_data.vp, zmath.rotationY(camera_rotation[1]));
+        push_constant_data.vp = zmath.mul(push_constant_data.vp, zmath.rotationX(camera_rotation[0]));
+        push_constant_data.vp = zmath.mul(push_constant_data.vp, zmath.perspectiveFovLh(90.0, 1.0, 1.0, 100.0));
+        // push_constant_data.vp = zmath.inverse(push_constant_data.vp);
 
         const image_index = try swapchain.acquireNextImage();
         var command_buffer = command_buffers[image_index];
@@ -1527,7 +1664,8 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
         command_buffer.pushConstants(pipeline_layout, c.VK_SHADER_STAGE_VERTEX_BIT, &push_constant_data);
 
-        logical_device.dispatch.CmdDraw(command_buffer.handle, 3, 1, 0, 0);
+        model.bind(&command_buffer);
+        model.draw(&command_buffer);
 
         logical_device.dispatch.CmdEndRenderPass(command_buffer.handle);
 
@@ -1542,5 +1680,6 @@ pub fn main() !void {
     defer std.debug.assert(general_purpose_allocator.deinit() == .ok);
     const allocator = general_purpose_allocator.allocator();
 
-    try raymarch(allocator);
+    // try raymarch(allocator);
+    try conventional(allocator);
 }
