@@ -8,6 +8,9 @@ const c = @cImport({
 
 pub const AllocationCallbacks = ?*c.VkAllocationCallbacks;
 
+pub const VertexAttribute = c.VkVertexInputAttributeDescription;
+pub const VertexBinding = c.VkVertexInputBindingDescription;
+
 pub const Library = struct {
     get_instance_proc_addr: std.meta.Child(c.PFN_vkGetInstanceProcAddr),
 
@@ -1030,15 +1033,9 @@ pub const CommandBuffer = struct {
         if (self.device.dispatch.EndCommandBuffer(self.handle) < 0) return error.VkEndCommandBuffer;
     }
 
-    // pipeline.bind(&command_buffer);
-
     pub fn pushConstants(self: *@This(), pipeline_layout: c.VkPipelineLayout, shader_stage: c.VkShaderStageFlags, push_constant_data: anytype) void {
         self.device.dispatch.CmdPushConstants(self.handle, pipeline_layout, shader_stage, 0, @sizeOf(@TypeOf(push_constant_data.*)), push_constant_data);
     }
-
-    // logical_device.dispatch.CmdDraw(command_buffer.handle, 6, 1, 0, 0);
-
-    // logical_device.dispatch.CmdEndRenderPass(command_buffer.handle);
 };
 
 pub const ShaderModule = struct {
@@ -1232,9 +1229,9 @@ pub const Model = struct {
         position: @Vector(3, f32),
         uv: @Vector(2, f32),
 
-        pub fn getBindingDescriptions() []c.VkVertexInputBindingDescription {
-            return @constCast(&[_]c.VkVertexInputBindingDescription{
-                c.VkVertexInputBindingDescription{
+        pub fn getBindingDescriptions() []VertexBinding {
+            return @constCast(&[_]VertexBinding{
+                VertexBinding{
                     .binding = 0,
                     .stride = @sizeOf(@This()),
                     .inputRate = c.VK_VERTEX_INPUT_RATE_VERTEX,
@@ -1242,17 +1239,17 @@ pub const Model = struct {
             });
         }
 
-        pub fn getAttributeDescriptions() []c.VkVertexInputAttributeDescription {
-            return @constCast(&[_]c.VkVertexInputAttributeDescription{
-                c.VkVertexInputAttributeDescription{
+        pub fn getAttributeDescriptions() []VertexAttribute {
+            return @constCast(&[_]VertexAttribute{
+                VertexAttribute{
                     .binding = 0,
-                    .format = c.VK_FORMAT_R32G32B32_SFLOAT,
+                    .format = 106,
                     .location = 0,
                     .offset = 0,
                 },
-                c.VkVertexInputAttributeDescription{
+                VertexAttribute{
                     .binding = 0,
-                    .format = c.VK_FORMAT_R32G32_SFLOAT,
+                    .format = 103,
                     .location = 1,
                     .offset = @offsetOf(@This(), "uv"),
                 },

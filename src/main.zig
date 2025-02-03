@@ -295,7 +295,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
     var keyboard = std.mem.zeroes(Keyboard);
 
-    var camera_position: @Vector(3, f32) = .{ 0.0, 0.0, 0.0 };
+    var camera_position: zmath.F32x4 = .{ 0.0, 0.0, 0.0, 1.0 };
     var camera_rotation: @Vector(3, f32) = .{ 0.0, 0.0, 0.0 };
 
     var push_constant_data = PushConstantData{
@@ -353,38 +353,26 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
             }
         }
 
-        if (keyboard.w) camera_position[2] -= 0.1;
-        if (keyboard.s) camera_position[2] += 0.1;
-        if (keyboard.d) camera_position[0] -= 0.1;
-        if (keyboard.a) camera_position[0] += 0.1;
-        if (keyboard.lshift) camera_position[1] -= 0.1;
-        if (keyboard.space) camera_position[1] += 0.1;
+        var camera_movement: zmath.F32x4 = .{ 0.0, 0.0, 0.0, 1.0 };
 
-        if (keyboard.up) camera_rotation[0] -= 0.01;
-        if (keyboard.down) camera_rotation[0] += 0.01;
-        if (keyboard.right) camera_rotation[1] -= 0.01;
-        if (keyboard.left) camera_rotation[1] += 0.01;
+        if (keyboard.w) camera_movement[2] -= 0.1;
+        if (keyboard.s) camera_movement[2] += 0.1;
+        if (keyboard.d) camera_movement[0] += 0.1;
+        if (keyboard.a) camera_movement[0] -= 0.1;
+        if (keyboard.lshift) camera_movement[1] += 0.1;
+        if (keyboard.space) camera_movement[1] -= 0.1;
 
-        // push_constant_data.view = zmath.translation(camera_position[0], camera_position[1], camera_position[2]);
-        // push_constant_data.view = zmath.mul(push_constant_data.view, zmath.rotationY(camera_rotation[1]));
-        // push_constant_data.view = zmath.mul(push_constant_data.view, zmath.rotationX(camera_rotation[0]));
-        // push_constant_data.proj = zmath.perspectiveFovLh(90.0, 1.0, 1.0, 100.0);
-        // push_constant_data.vp = zmath.inverse(push_constant_data.vp);
+        camera_position += camera_movement;
 
-        // push_constant_data.view = zmath.lookToLh(.{ camera_position[0], camera_position[1], camera_position[2], 0.0 }, .{ camera_rotation[0], camera_rotation[1], camera_rotation[2], 0.0 }, .{ 0.0, 1.0, 0.0, 0.0 });
-        // push_constant_data.proj = zmath.perspectiveFovLh(3.14 / 4.0, 1.0, 0.01, 100.0);
-
-        // const world_to_view = zmath.lookAtRh(
-        //     zmath.f32x4(camera_position[0], camera_position[1], camera_position[2], 1.0), // eye position
-        //     zmath.f32x4(camera_position[0], camera_position[1], camera_position[2] + 0.1, 1.0), // focus point
-        //     zmath.f32x4(0.0, 1.0, 0.0, 0.0), // up direction ('w' coord is zero because this is a vector not a point)
-        // );
-        // `perspectiveFovRhGl` produces Z values in [-1.0, 1.0] range (Vulkan app should use `perspectiveFovRh`)
+        if (keyboard.up) camera_rotation[0] += 0.01;
+        if (keyboard.down) camera_rotation[0] -= 0.01;
+        if (keyboard.right) camera_rotation[1] += 0.01;
+        if (keyboard.left) camera_rotation[1] -= 0.01;
 
         var world_to_view = zmath.inverse(zmath.translation(camera_position[0], camera_position[1], camera_position[2]));
         world_to_view = zmath.mul(world_to_view, zmath.mul(zmath.rotationX(camera_rotation[0]), zmath.rotationY(camera_rotation[1])));
 
-        const view_to_clip = zmath.perspectiveFovRh(0.25 * std.math.pi, 1, 0.1, 20.0);
+        const view_to_clip = zmath.perspectiveFovRh(0.25 * std.math.pi, 1, 0.1, 200.0);
 
         const world_to_clip = zmath.mul(world_to_view, view_to_clip);
 
@@ -395,7 +383,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
         try command_buffer.begin();
 
-        swapchain.beginRenderPass(&command_buffer, image_index, .{ .r = 0.0, .g = 1.0, .b = 0.0, .a = 1.0 });
+        swapchain.beginRenderPass(&command_buffer, image_index, .{ .r = 0.0, .g = 0.4, .b = 0.6, .a = 1.0 });
 
         pipeline.bind(&command_buffer);
 
