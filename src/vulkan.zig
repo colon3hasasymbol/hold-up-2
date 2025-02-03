@@ -11,6 +11,86 @@ pub const AllocationCallbacks = ?*c.VkAllocationCallbacks;
 pub const VertexAttribute = c.VkVertexInputAttributeDescription;
 pub const VertexBinding = c.VkVertexInputBindingDescription;
 
+pub const ShaderStage = struct {
+    pub const VERTEX_BIT: u32 = 1;
+    pub const TESSELLATION_CONTROL_BIT: u32 = 2;
+    pub const TESSELLATION_EVALUATION_BIT: u32 = 4;
+    pub const GEOMETRY_BIT: u32 = 8;
+    pub const FRAGMENT_BIT: u32 = 16;
+    pub const COMPUTE_BIT: u32 = 32;
+    pub const ALL_GRAPHICS: u32 = 31;
+    pub const ALL: u32 = 2147483647;
+    pub const RAYGEN_BIT_KHR: u32 = 256;
+    pub const ANY_HIT_BIT_KHR: u32 = 512;
+    pub const CLOSEST_HIT_BIT_KHR: u32 = 1024;
+    pub const MISS_BIT_KHR: u32 = 2048;
+    pub const INTERSECTION_BIT_KHR: u32 = 4096;
+    pub const CALLABLE_BIT_KHR: u32 = 8192;
+    pub const TASK_BIT_EXT: u32 = 64;
+    pub const MESH_BIT_EXT: u32 = 128;
+    pub const SUBPASS_SHADING_BIT_HUAWEI: u32 = 16384;
+    pub const CLUSTER_CULLING_BIT_HUAWEI: u32 = 524288;
+    pub const RAYGEN_BIT_NV: u32 = 256;
+    pub const ANY_HIT_BIT_NV: u32 = 512;
+    pub const CLOSEST_HIT_BIT_NV: u32 = 1024;
+    pub const MISS_BIT_NV: u32 = 2048;
+    pub const INTERSECTION_BIT_NV: u32 = 4096;
+    pub const CALLABLE_BIT_NV: u32 = 8192;
+    pub const TASK_BIT_NV: u32 = 64;
+    pub const MESH_BIT_NV: u32 = 128;
+    pub const FLAG_BITS_MAX_ENUM: u32 = 2147483647;
+};
+
+pub const BufferUsage = struct {
+    pub const TRANSFER_SRC_BIT: c_int = 1;
+    pub const TRANSFER_DST_BIT: c_int = 2;
+    pub const UNIFORM_TEXEL_BUFFER_BIT: c_int = 4;
+    pub const STORAGE_TEXEL_BUFFER_BIT: c_int = 8;
+    pub const UNIFORM_BUFFER_BIT: c_int = 16;
+    pub const STORAGE_BUFFER_BIT: c_int = 32;
+    pub const INDEX_BUFFER_BIT: c_int = 64;
+    pub const VERTEX_BUFFER_BIT: c_int = 128;
+    pub const INDIRECT_BUFFER_BIT: c_int = 256;
+    pub const SHADER_DEVICE_ADDRESS_BIT: c_int = 131072;
+    pub const VIDEO_DECODE_SRC_BIT_KHR: c_int = 8192;
+    pub const VIDEO_DECODE_DST_BIT_KHR: c_int = 16384;
+    pub const TRANSFORM_FEEDBACK_BUFFER_BIT_EXT: c_int = 2048;
+    pub const TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT: c_int = 4096;
+    pub const CONDITIONAL_RENDERING_BIT_EXT: c_int = 512;
+    pub const ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR: c_int = 524288;
+    pub const ACCELERATION_STRUCTURE_STORAGE_BIT_KHR: c_int = 1048576;
+    pub const SHADER_BINDING_TABLE_BIT_KHR: c_int = 1024;
+    pub const VIDEO_ENCODE_DST_BIT_KHR: c_int = 32768;
+    pub const VIDEO_ENCODE_SRC_BIT_KHR: c_int = 65536;
+    pub const SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT: c_int = 2097152;
+    pub const RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT: c_int = 4194304;
+    pub const PUSH_DESCRIPTORS_DESCRIPTOR_BUFFER_BIT_EXT: c_int = 67108864;
+    pub const MICROMAP_BUILD_INPUT_READ_ONLY_BIT_EXT: c_int = 8388608;
+    pub const MICROMAP_STORAGE_BIT_EXT: c_int = 16777216;
+    pub const RAY_TRACING_BIT_NV: c_int = 1024;
+    pub const SHADER_DEVICE_ADDRESS_BIT_EXT: c_int = 131072;
+    pub const SHADER_DEVICE_ADDRESS_BIT_KHR: c_int = 131072;
+    pub const FLAG_BITS_MAX_ENUM: c_int = 2147483647;
+};
+
+pub const MemoryProperty = struct {
+    pub const DEVICE_LOCAL_BIT: c_int = 1;
+    pub const HOST_VISIBLE_BIT: c_int = 2;
+    pub const HOST_COHERENT_BIT: c_int = 4;
+    pub const HOST_CACHED_BIT: c_int = 8;
+    pub const LAZILY_ALLOCATED_BIT: c_int = 16;
+    pub const PROTECTED_BIT: c_int = 32;
+    pub const DEVICE_COHERENT_BIT_AMD: c_int = 64;
+    pub const DEVICE_UNCACHED_BIT_AMD: c_int = 128;
+    pub const RDMA_CAPABLE_BIT_NV: c_int = 256;
+    pub const FLAG_BITS_MAX_ENUM: c_int = 2147483647;
+};
+
+pub const VertexInputRate = struct {
+    pub const PER_VERTEX: c_uint = 0;
+    pub const PER_INSTANCE: c_uint = 1;
+};
+
 pub const Library = struct {
     get_instance_proc_addr: std.meta.Child(c.PFN_vkGetInstanceProcAddr),
 
@@ -1222,106 +1302,4 @@ pub const Pipeline = struct {
     pub fn bind(self: *@This(), command_buffer: *CommandBuffer) void {
         self.device.dispatch.CmdBindPipeline(command_buffer.handle, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.handle);
     }
-};
-
-pub const Model = struct {
-    pub const Vertex = struct {
-        position: @Vector(3, f32),
-        uv: @Vector(2, f32),
-
-        pub fn getBindingDescriptions() []VertexBinding {
-            return @constCast(&[_]VertexBinding{
-                VertexBinding{
-                    .binding = 0,
-                    .stride = @sizeOf(@This()),
-                    .inputRate = c.VK_VERTEX_INPUT_RATE_VERTEX,
-                },
-            });
-        }
-
-        pub fn getAttributeDescriptions() []VertexAttribute {
-            return @constCast(&[_]VertexAttribute{
-                VertexAttribute{
-                    .binding = 0,
-                    .format = 106,
-                    .location = 0,
-                    .offset = 0,
-                },
-                VertexAttribute{
-                    .binding = 0,
-                    .format = 103,
-                    .location = 1,
-                    .offset = @offsetOf(@This(), "uv"),
-                },
-            });
-        }
-    };
-
-    vertex_buffer: Buffer,
-    vertex_count: u32,
-    device: *const LogicalDevice,
-    allocation_callbacks: AllocationCallbacks,
-
-    pub fn init(device: *const LogicalDevice, vertices: []const Vertex, allocation_callbacks: AllocationCallbacks) !@This() {
-        const vertex_count: u32 = @intCast(vertices.len);
-
-        const vertex_buffer_size: c.VkDeviceSize = @sizeOf(@TypeOf(vertices[0])) * vertex_count;
-
-        var vertex_buffer = try Buffer.init(device, vertex_buffer_size, c.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, allocation_callbacks);
-        try vertex_buffer.createMemory(c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-        try vertex_buffer.uploadData(vertices);
-
-        return .{
-            .vertex_buffer = vertex_buffer,
-            .vertex_count = vertex_count,
-            .device = device,
-            .allocation_callbacks = allocation_callbacks,
-        };
-    }
-
-    pub fn deinit(self: *@This()) void {
-        self.device.dispatch.DestroyBuffer(self.device.handle, self.vertex_buffer, self.allocation_callbacks);
-        self.device.freeMemory(self.vertex_memory, self.allocation_callbacks);
-    }
-
-    pub fn bind(self: *@This(), command_buffer: *CommandBuffer) void {
-        const buffers = [_]c.VkBuffer{self.vertex_buffer.handle};
-        const offsets = [_]c.VkDeviceSize{0};
-
-        self.device.dispatch.CmdBindVertexBuffers(command_buffer.handle, 0, 1, &buffers, &offsets);
-    }
-
-    pub fn draw(self: *@This(), command_buffer: *CommandBuffer) void {
-        self.device.dispatch.CmdDraw(command_buffer.handle, self.vertex_count, 1, 0, 0);
-    }
-};
-
-pub const ShaderStage = struct {
-    pub const VERTEX_BIT: u32 = 1;
-    pub const TESSELLATION_CONTROL_BIT: u32 = 2;
-    pub const TESSELLATION_EVALUATION_BIT: u32 = 4;
-    pub const GEOMETRY_BIT: u32 = 8;
-    pub const FRAGMENT_BIT: u32 = 16;
-    pub const COMPUTE_BIT: u32 = 32;
-    pub const ALL_GRAPHICS: u32 = 31;
-    pub const ALL: u32 = 2147483647;
-    pub const RAYGEN_BIT_KHR: u32 = 256;
-    pub const ANY_HIT_BIT_KHR: u32 = 512;
-    pub const CLOSEST_HIT_BIT_KHR: u32 = 1024;
-    pub const MISS_BIT_KHR: u32 = 2048;
-    pub const INTERSECTION_BIT_KHR: u32 = 4096;
-    pub const CALLABLE_BIT_KHR: u32 = 8192;
-    pub const TASK_BIT_EXT: u32 = 64;
-    pub const MESH_BIT_EXT: u32 = 128;
-    pub const SUBPASS_SHADING_BIT_HUAWEI: u32 = 16384;
-    pub const CLUSTER_CULLING_BIT_HUAWEI: u32 = 524288;
-    pub const RAYGEN_BIT_NV: u32 = 256;
-    pub const ANY_HIT_BIT_NV: u32 = 512;
-    pub const CLOSEST_HIT_BIT_NV: u32 = 1024;
-    pub const MISS_BIT_NV: u32 = 2048;
-    pub const INTERSECTION_BIT_NV: u32 = 4096;
-    pub const CALLABLE_BIT_NV: u32 = 8192;
-    pub const TASK_BIT_NV: u32 = 64;
-    pub const MESH_BIT_NV: u32 = 128;
-    pub const FLAG_BITS_MAX_ENUM: u32 = 2147483647;
 };

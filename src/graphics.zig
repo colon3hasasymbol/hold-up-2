@@ -12,7 +12,7 @@ pub const Model = struct {
                 vk.VertexBinding{
                     .binding = 0,
                     .stride = @sizeOf(@This()),
-                    .inputRate = c.VK_VERTEX_INPUT_RATE_VERTEX,
+                    .inputRate = vk.VertexInputRate.PER_VERTEX,
                 },
             });
         }
@@ -45,8 +45,8 @@ pub const Model = struct {
 
         const vertex_buffer_size: u64 = @sizeOf(@TypeOf(vertices[0])) * vertex_count;
 
-        var vertex_buffer = try vk.Buffer.init(device, vertex_buffer_size, c.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, allocation_callbacks);
-        try vertex_buffer.createMemory(c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        var vertex_buffer = try vk.Buffer.init(device, vertex_buffer_size, vk.BufferUsage.VERTEX_BUFFER_BIT, allocation_callbacks);
+        try vertex_buffer.createMemory(vk.MemoryProperty.HOST_VISIBLE_BIT | vk.MemoryProperty.HOST_COHERENT_BIT);
         try vertex_buffer.uploadData(vertices);
 
         return .{

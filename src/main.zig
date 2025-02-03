@@ -6,6 +6,7 @@ const c = @cImport({
 });
 
 const vk = @import("vulkan.zig");
+const gx = @import("graphics.zig");
 
 pub fn raymarch(allocator: std.mem.Allocator) !void {
     if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) {
@@ -258,27 +259,27 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     var vert_shader = try vk.ShaderModule.init(&logical_device, &vert_spv, null);
     defer vert_shader.deinit();
 
-    var pipeline = try vk.Pipeline.init(&logical_device, pipeline_layout, swapchain.render_pass, &frag_shader, &vert_shader, window_extent, vk.Model.Vertex.getAttributeDescriptions(), vk.Model.Vertex.getBindingDescriptions(), null);
+    var pipeline = try vk.Pipeline.init(&logical_device, pipeline_layout, swapchain.render_pass, &frag_shader, &vert_shader, window_extent, gx.Model.Vertex.getAttributeDescriptions(), gx.Model.Vertex.getBindingDescriptions(), null);
     defer pipeline.deinit();
 
     window.show();
 
-    const vertices = [_]vk.Model.Vertex{
-        vk.Model.Vertex{
+    const vertices = [_]gx.Model.Vertex{
+        gx.Model.Vertex{
             .position = .{ 0.0, -0.5, 0.5 },
             .uv = .{ 0.0, 1.0 },
         },
-        vk.Model.Vertex{
+        gx.Model.Vertex{
             .position = .{ 0.5, 0.5, 0.5 },
             .uv = .{ 1.0, 0.0 },
         },
-        vk.Model.Vertex{
+        gx.Model.Vertex{
             .position = .{ -0.5, 0.5, 0.5 },
             .uv = .{ 1.0, 1.0 },
         },
     };
 
-    var model = try vk.Model.init(&logical_device, &vertices, null);
+    var model = try gx.Model.init(&logical_device, &vertices, null);
 
     const Keyboard = struct {
         w: bool,
