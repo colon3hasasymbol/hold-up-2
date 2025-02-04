@@ -8,12 +8,81 @@ const c = @cImport({
 const vk = @import("vulkan.zig");
 const gx = @import("graphics.zig");
 
-pub const Renderer = struct {};
+pub const GraphicsDevice = struct {
+    vulkan_library: vk.Library,
+    vulkan_window: vk.Window,
+    vulkan_instance: vk.Instance,
+    vulkan_surface: vk.Surface,
+    vulkan_physical_device: vk.PhysicalDevice,
+    vulkan_logical_device: vk.LogicalDevice,
+    vulkan_swapchain: vk.Swapchain,
+    vulkan_command_pool: vk.CommandPool,
+    vulkan_command_buffer: vk.CommandBuffer,
+    vulkan_pipeline: vk.Pipeline,
+
+    pub fn init(allocator: std.mem.Allocator) !@This() {
+        if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) {
+            c.SDL_LogError(c.SDL_LOG_CATEGORY_APPLICATION, "%s", c.SDL_GetError());
+            return error.SDLInitVideo;
+        }
+        defer c.SDL_Quit();
+
+        var vulkan_library = try vk.Library.init();
+        defer vulkan_library.deinit();
+
+        var window = try vk.Window.init("the unqeustionable");
+        defer window.deinit();
+
+        const extensions = try window.getRequiredExtensions(allocator);
+        defer allocator.free(extensions);
+
+        var instance = try vk.Instance.init(extensions, &vulkan_library, null);
+        defer instance.deinit();
+
+        var surface = try vk.Surface.init(&instance, &window);
+        defer surface.deinit();
+
+        const physical_device = try instance.requestPhysicalDevice(allocator, &surface);
+
+        var logical_device = try physical_device.createLogicalDevice(null);
+        defer logical_device.deinit();
+
+        var swapchain = try logical_device.createSwapchain(&surface, window.getExtent(), allocator, null);
+        defer swapchain.deinit();
+
+        var command_pool = try logical_device.createCommandPool(physical_device.graphics_queue_family_index, allocator, null);
+        defer command_pool.deinit();
+
+        const command_buffers = try command_pool.allocate(swapchain.color_images.len, allocator);
+        defer allocator.free(command_buffers);
+
+        const window_extent = window.getExtent();
+
+        const PushConstantData = struct {
+            vp: zmath.Mat,
+        };
+
+        const pipeline_layout = try vk.Pipeline.createLayout(&logical_device, PushConstantData, null);
+        defer vk.Pipeline.destroyLayout(&logical_device, pipeline_layout, null);
+
+        const frag_spv align(@alignOf(u32)) = @embedFile("shaders/simple_shader.frag.spv").*;
+        const vert_spv align(@alignOf(u32)) = @embedFile("shaders/simple_shader.vert.spv").*;
+
+        var frag_shader = try vk.ShaderModule.init(&logical_device, &frag_spv, null);
+        defer frag_shader.deinit();
+
+        var vert_shader = try vk.ShaderModule.init(&logical_device, &vert_spv, null);
+        defer vert_shader.deinit();
+
+        var pipeline = try vk.Pipeline.init(&logical_device, pipeline_layout, swapchain.render_pass, &frag_shader, &vert_shader, window_extent, gx.Model.Vertex.getAttributeDescriptions(), gx.Model.Vertex.getBindingDescriptions(), null);
+        defer pipeline.deinit();
+    }
+};
 
 pub const GameWorld = struct {
     pub const Object = struct {
         model: ?*gx.Model,
-        transform: ?@Vector(2, zmath.Vec),
+        transform: ?[2]zmath.Vec,
     };
 
     objects: std.StringHashMap(Object),
@@ -30,7 +99,7 @@ pub const GameWorld = struct {
         self.objects.deinit();
     }
 
-    pub fn spawn(self: *@This(), object: Object, name: []u8) !void {
+    pub fn spawn(self: *@This(), object: Object, name: []const u8) !void {
         if (self.objects.contains(name)) return error.ObjectNameUnavailable;
         try self.objects.put(name, object);
     }
@@ -41,6 +110,9 @@ pub const GameWorld = struct {
 };
 
 pub fn conventional(allocator: std.mem.Allocator) !void {
+    var game_world = try GameWorld.init(allocator);
+    defer game_world.deinit();
+
     if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) {
         c.SDL_LogError(c.SDL_LOG_CATEGORY_APPLICATION, "%s", c.SDL_GetError());
         return error.SDLInitVideo;
@@ -114,7 +186,9 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
         },
     };
 
-    var model = try gx.Model.init(&logical_device, &vertices, null);
+    var triangle_model = try gx.Model.init(&logical_device, &vertices, null);
+
+    try game_world.spawn(.{ .transform = .{ .{ 0.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model }, "triangle");
 
     const Keyboard = struct {
         w: bool,
@@ -225,8 +299,13 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
         command_buffer.pushConstants(pipeline_layout, vk.ShaderStage.VERTEX_BIT, &push_constant_data);
 
-        model.bind(&command_buffer);
-        model.draw(&command_buffer);
+        var object_iterator = game_world.objects.iterator();
+        while (object_iterator.next()) |*object| {
+            if (object.value_ptr.model) |model| {
+                model.bind(&command_buffer);
+                model.draw(&command_buffer);
+            }
+        }
 
         swapchain.endRenderPass(&command_buffer);
 
