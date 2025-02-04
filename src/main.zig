@@ -7,11 +7,13 @@ const c = @cImport({
 
 const vk = @import("vulkan.zig");
 const gx = @import("graphics.zig");
+const px = @import("physics.zig");
 
 pub const GameWorld = struct {
     pub const Object = struct {
         model: ?*gx.Model,
         transform: ?[2]zmath.Vec,
+        aabb: ?px.Cube,
     };
 
     objects: std.StringHashMap(Object),
@@ -100,24 +102,52 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
     window.show();
 
+    var is_colliding = false;
+    var was_colliding = true;
+
     const vertices = [_]gx.Model.Vertex{
-        gx.Model.Vertex{
-            .position = .{ 0.0, -0.5, 0.5 },
-            .uv = .{ 0.0, 1.0 },
-        },
-        gx.Model.Vertex{
-            .position = .{ 0.5, 0.5, 0.5 },
-            .uv = .{ 1.0, 0.0 },
-        },
-        gx.Model.Vertex{
-            .position = .{ -0.5, 0.5, 0.5 },
-            .uv = .{ 1.0, 1.0 },
-        },
+        gx.Model.Vertex{ .position = .{ -0.5, -0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ -0.5, 0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ -0.5, -0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ -0.5, -0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ -0.5, 0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ -0.5, 0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ 0.5, -0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ 0.5, 0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ 0.5, -0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ 0.5, -0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ 0.5, 0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ 0.5, 0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ -0.5, -0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ 0.5, -0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ -0.5, -0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ -0.5, -0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ 0.5, -0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ 0.5, -0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ -0.5, 0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ 0.5, 0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ -0.5, 0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ -0.5, 0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ 0.5, 0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ 0.5, 0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ -0.5, -0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ 0.5, 0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ -0.5, 0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ -0.5, -0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ 0.5, -0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ 0.5, 0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ -0.5, -0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ 0.5, 0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ -0.5, 0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ -0.5, -0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ 0.5, -0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
+        gx.Model.Vertex{ .position = .{ 0.5, 0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
     };
 
     var triangle_model = try gx.Model.init(&logical_device, &vertices, null);
 
-    try game_world.spawn(.{ .transform = .{ .{ 0.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model }, "triangle");
+    try game_world.spawn(.{ .transform = .{ .{ 10.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .aabb = px.Cube.cube1x1() }, "cube0");
+    try game_world.spawn(.{ .transform = .{ .{ 0.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .aabb = px.Cube.cube1x1() }, "cube1");
 
     const Keyboard = struct {
         w: bool,
@@ -130,6 +160,10 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
         down: bool,
         right: bool,
         left: bool,
+        i: bool,
+        j: bool,
+        k: bool,
+        l: bool,
     };
 
     var keyboard = std.mem.zeroes(Keyboard);
@@ -168,6 +202,10 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
                         c.SDLK_DOWN => keyboard.down = false,
                         c.SDLK_RIGHT => keyboard.right = false,
                         c.SDLK_LEFT => keyboard.left = false,
+                        c.SDLK_i => keyboard.i = false,
+                        c.SDLK_j => keyboard.j = false,
+                        c.SDLK_k => keyboard.k = false,
+                        c.SDLK_l => keyboard.l = false,
 
                         else => {},
                     }
@@ -184,6 +222,10 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
                         c.SDLK_DOWN => keyboard.down = true,
                         c.SDLK_RIGHT => keyboard.right = true,
                         c.SDLK_LEFT => keyboard.left = true,
+                        c.SDLK_i => keyboard.i = true,
+                        c.SDLK_j => keyboard.j = true,
+                        c.SDLK_k => keyboard.k = true,
+                        c.SDLK_l => keyboard.l = true,
 
                         else => {},
                     }
@@ -215,8 +257,6 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
         const world_to_clip = zmath.mul(world_to_view, view_to_clip);
 
-        push_constant_data.vp = world_to_clip;
-
         const image_index = try swapchain.acquireNextImage();
         var command_buffer = command_buffers[image_index];
 
@@ -226,11 +266,16 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
         pipeline.bind(&command_buffer);
 
-        command_buffer.pushConstants(pipeline_layout, vk.ShaderStage.VERTEX_BIT, &push_constant_data);
-
         var object_iterator = game_world.objects.iterator();
         while (object_iterator.next()) |*object| {
             if (object.value_ptr.model) |model| {
+                if (object.value_ptr.transform) |transform| {
+                    const object_to_world = zmath.mul(zmath.translation(transform[0][0], transform[0][1], transform[0][2]), zmath.matFromRollPitchYaw(transform[1][0], transform[1][1], transform[1][2]));
+                    push_constant_data.vp = zmath.mul(object_to_world, world_to_clip);
+                } else {
+                    push_constant_data.vp = world_to_clip;
+                }
+                command_buffer.pushConstants(pipeline_layout, vk.ShaderStage.VERTEX_BIT, &push_constant_data);
                 model.bind(&command_buffer);
                 model.draw(&command_buffer);
             }
@@ -241,6 +286,30 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
         try command_buffer.end();
 
         try swapchain.submitCommandBuffers(&command_buffer, image_index);
+
+        const cube0 = game_world.objects.getPtr("cube0").?;
+        const cube1 = game_world.objects.getPtr("cube1").?;
+
+        var cube0position = &cube0.transform.?[0];
+        const cube1position = cube1.transform.?[0];
+
+        if (keyboard.i) cube0position[2] -= 0.1;
+        if (keyboard.k) cube0position[2] += 0.1;
+        if (keyboard.j) cube0position[0] -= 0.1;
+        if (keyboard.l) cube0position[0] += 0.1;
+
+        const cube0aabb = cube0.aabb.?;
+        const cube1aabb = cube1.aabb.?;
+
+        is_colliding = cube0aabb.translate(cube0position.*).overlapping(cube1aabb.translate(cube1position));
+
+        if (was_colliding and !is_colliding) {
+            std.debug.print("is_colliding: false\n", .{});
+        }
+        if (is_colliding and !was_colliding) {
+            std.debug.print("is_colliding: true\n", .{});
+        }
+        was_colliding = is_colliding;
     }
 }
 
