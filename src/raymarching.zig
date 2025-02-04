@@ -8,39 +8,7 @@ const c = @cImport({
 const vk = @import("vulkan.zig");
 const gx = @import("graphics.zig");
 
-pub const Renderer = struct {};
-
-pub const GameWorld = struct {
-    pub const Object = struct {
-        model: ?*gx.Model,
-        transform: ?@Vector(2, zmath.Vec),
-    };
-
-    objects: std.StringHashMap(Object),
-    allocator: std.mem.Allocator,
-
-    pub fn init(allocator: std.mem.Allocator) !@This() {
-        return .{
-            .objects = std.StringHashMap(Object).init(allocator),
-            .allocator = allocator,
-        };
-    }
-
-    pub fn deinit(self: *@This()) void {
-        self.objects.deinit();
-    }
-
-    pub fn spawn(self: *@This(), object: Object, name: []u8) !void {
-        if (self.objects.contains(name)) return error.ObjectNameUnavailable;
-        try self.objects.put(name, object);
-    }
-
-    pub fn kill(self: *@This(), name: []u8) !void {
-        if (!self.objects.remove(name)) return error.ObjectNonExistent;
-    }
-};
-
-pub fn conventional(allocator: std.mem.Allocator) !void {
+pub fn raymarch(allocator: std.mem.Allocator) !void {
     if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) {
         c.SDL_LogError(c.SDL_LOG_CATEGORY_APPLICATION, "%s", c.SDL_GetError());
         return error.SDLInitVideo;
@@ -79,14 +47,16 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     const window_extent = window.getExtent();
 
     const PushConstantData = struct {
-        vp: zmath.Mat,
+        inverse_vp: zmath.Mat,
+        near_plane: f32,
+        far_plane: f32,
     };
 
     const pipeline_layout = try vk.Pipeline.createLayout(&logical_device, PushConstantData, null);
     defer vk.Pipeline.destroyLayout(&logical_device, pipeline_layout, null);
 
-    const frag_spv align(@alignOf(u32)) = @embedFile("shaders/simple_shader.frag.spv").*;
-    const vert_spv align(@alignOf(u32)) = @embedFile("shaders/simple_shader.vert.spv").*;
+    const frag_spv align(@alignOf(u32)) = @embedFile("shaders/ray_marching.frag.spv").*;
+    const vert_spv align(@alignOf(u32)) = @embedFile("shaders/ray_marching.vert.spv").*;
 
     var frag_shader = try vk.ShaderModule.init(&logical_device, &frag_spv, null);
     defer frag_shader.deinit();
@@ -94,27 +64,10 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     var vert_shader = try vk.ShaderModule.init(&logical_device, &vert_spv, null);
     defer vert_shader.deinit();
 
-    var pipeline = try vk.Pipeline.init(&logical_device, pipeline_layout, swapchain.render_pass, &frag_shader, &vert_shader, window_extent, gx.Model.Vertex.getAttributeDescriptions(), gx.Model.Vertex.getBindingDescriptions(), null);
+    var pipeline = try vk.Pipeline.init(&logical_device, pipeline_layout, swapchain.render_pass, &frag_shader, &vert_shader, window_extent, &[_]c.VkVertexInputAttributeDescription{}, &[_]c.VkVertexInputBindingDescription{}, null);
     defer pipeline.deinit();
 
     window.show();
-
-    const vertices = [_]gx.Model.Vertex{
-        gx.Model.Vertex{
-            .position = .{ 0.0, -0.5, 0.5 },
-            .uv = .{ 0.0, 1.0 },
-        },
-        gx.Model.Vertex{
-            .position = .{ 0.5, 0.5, 0.5 },
-            .uv = .{ 1.0, 0.0 },
-        },
-        gx.Model.Vertex{
-            .position = .{ -0.5, 0.5, 0.5 },
-            .uv = .{ 1.0, 1.0 },
-        },
-    };
-
-    var model = try gx.Model.init(&logical_device, &vertices, null);
 
     const Keyboard = struct {
         w: bool,
@@ -131,11 +84,13 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
     var keyboard = std.mem.zeroes(Keyboard);
 
-    var camera_position: zmath.Vec = .{ 0.0, 0.0, 0.0, 1.0 };
-    var camera_rotation: zmath.Vec = .{ 0.0, 0.0, 0.0, 0.0 };
+    var camera_position: @Vector(3, f32) = .{ 0.0, 0.0, 0.0 };
+    var camera_rotation: @Vector(3, f32) = .{ 0.0, 0.0, 0.0 };
 
     var push_constant_data = PushConstantData{
-        .vp = zmath.identity(),
+        .inverse_vp = zmath.inverse(zmath.perspectiveFovLh(90.0, 1.0, 1.0, 100.0)),
+        .near_plane = 1.0,
+        .far_plane = 100.0,
     };
 
     main_loop: while (true) {
@@ -189,57 +144,63 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
             }
         }
 
-        var camera_movement: zmath.F32x4 = .{ 0.0, 0.0, 0.0, 1.0 };
+        if (keyboard.w) camera_position[2] -= 0.1;
+        if (keyboard.s) camera_position[2] += 0.1;
+        if (keyboard.d) camera_position[0] -= 0.1;
+        if (keyboard.a) camera_position[0] += 0.1;
+        if (keyboard.lshift) camera_position[1] -= 0.1;
+        if (keyboard.space) camera_position[1] += 0.1;
 
-        if (keyboard.w) camera_movement[2] -= 0.1;
-        if (keyboard.s) camera_movement[2] += 0.1;
-        if (keyboard.d) camera_movement[0] += 0.1;
-        if (keyboard.a) camera_movement[0] -= 0.1;
-        if (keyboard.lshift) camera_movement[1] += 0.1;
-        if (keyboard.space) camera_movement[1] -= 0.1;
+        if (keyboard.up) camera_rotation[0] -= 0.01;
+        if (keyboard.down) camera_rotation[0] += 0.01;
+        if (keyboard.right) camera_rotation[1] -= 0.01;
+        if (keyboard.left) camera_rotation[1] += 0.01;
 
-        camera_position += camera_movement;
-
-        if (keyboard.up) camera_rotation[0] += 0.01;
-        if (keyboard.down) camera_rotation[0] -= 0.01;
-        if (keyboard.right) camera_rotation[1] += 0.01;
-        if (keyboard.left) camera_rotation[1] -= 0.01;
-
-        var world_to_view = zmath.inverse(zmath.translation(camera_position[0], camera_position[1], camera_position[2]));
-        world_to_view = zmath.mul(world_to_view, zmath.mul(zmath.rotationX(camera_rotation[0]), zmath.rotationY(camera_rotation[1])));
-
-        const view_to_clip = zmath.perspectiveFovRh(0.25 * std.math.pi, 1, 0.1, 200.0);
-
-        const world_to_clip = zmath.mul(world_to_view, view_to_clip);
-
-        push_constant_data.vp = world_to_clip;
+        push_constant_data.inverse_vp = zmath.translation(camera_position[0], camera_position[1], camera_position[2]);
+        push_constant_data.inverse_vp = zmath.mul(push_constant_data.inverse_vp, zmath.rotationY(camera_rotation[1]));
+        push_constant_data.inverse_vp = zmath.mul(push_constant_data.inverse_vp, zmath.rotationX(camera_rotation[0]));
+        push_constant_data.inverse_vp = zmath.mul(push_constant_data.inverse_vp, zmath.perspectiveFovLh(90.0, 1.0, 1.0, 100.0));
+        push_constant_data.inverse_vp = zmath.inverse(push_constant_data.inverse_vp);
 
         const image_index = try swapchain.acquireNextImage();
         var command_buffer = command_buffers[image_index];
+        const frame_buffer = swapchain.frame_buffers[image_index];
 
         try command_buffer.begin();
 
-        swapchain.beginRenderPass(&command_buffer, image_index, .{ .r = 0.0, .g = 0.4, .b = 0.6, .a = 1.0 });
+        const clear_values = [_]c.VkClearValue{
+            c.VkClearValue{
+                .color = c.VkClearColorValue{ .float32 = .{ 1.0, 0.0, 0.0, 1.0 } },
+            },
+            c.VkClearValue{
+                .depthStencil = c.VkClearDepthStencilValue{ .depth = 0.0, .stencil = 0 },
+            },
+        };
+
+        const render_pass_info = std.mem.zeroInit(c.VkRenderPassBeginInfo, c.VkRenderPassBeginInfo{
+            .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .renderPass = swapchain.render_pass,
+            .framebuffer = frame_buffer,
+            .renderArea = c.VkRect2D{
+                .offset = c.VkOffset2D{ .x = 0, .y = 0 },
+                .extent = window_extent,
+            },
+            .clearValueCount = @intCast(clear_values.len),
+            .pClearValues = &clear_values,
+        });
+
+        logical_device.dispatch.CmdBeginRenderPass(command_buffer.handle, &render_pass_info, c.VK_SUBPASS_CONTENTS_INLINE);
 
         pipeline.bind(&command_buffer);
 
-        command_buffer.pushConstants(pipeline_layout, vk.ShaderStage.VERTEX_BIT, &push_constant_data);
+        command_buffer.pushConstants(pipeline_layout, c.VK_SHADER_STAGE_VERTEX_BIT, &push_constant_data);
 
-        model.bind(&command_buffer);
-        model.draw(&command_buffer);
+        logical_device.dispatch.CmdDraw(command_buffer.handle, 6, 1, 0, 0);
 
-        swapchain.endRenderPass(&command_buffer);
+        logical_device.dispatch.CmdEndRenderPass(command_buffer.handle);
 
         try command_buffer.end();
 
         try swapchain.submitCommandBuffers(&command_buffer, image_index);
     }
-}
-
-pub fn main() !void {
-    var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{ .verbose_log = true }){};
-    defer std.debug.assert(general_purpose_allocator.deinit() == .ok);
-    const allocator = general_purpose_allocator.allocator();
-
-    try conventional(allocator);
 }
