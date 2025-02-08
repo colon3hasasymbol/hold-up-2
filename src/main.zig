@@ -13,7 +13,7 @@ pub const GameWorld = struct {
     pub const Object = struct {
         model: ?*gx.Model,
         transform: ?[2]zmath.Vec,
-        aabb: ?px.Cube,
+        aabb: ?px.LockedCube,
     };
 
     objects: std.StringHashMap(Object),
@@ -146,8 +146,8 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
     var triangle_model = try gx.Model.init(&logical_device, &vertices, null);
 
-    try game_world.spawn(.{ .transform = .{ .{ 10.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .aabb = px.Cube.cube1x1() }, "cube0");
-    try game_world.spawn(.{ .transform = .{ .{ 0.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .aabb = px.Cube.cube1x1() }, "cube1");
+    try game_world.spawn(.{ .transform = .{ .{ 10.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .aabb = px.LockedCube.cube1x1() }, "cube0");
+    try game_world.spawn(.{ .transform = .{ .{ 0.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .aabb = px.LockedCube.cube1x1() }, "cube1");
 
     const Keyboard = struct {
         w: bool,
