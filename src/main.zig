@@ -105,49 +105,15 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     var is_colliding = false;
     var was_colliding = true;
 
-    const vertices = [_]gx.Model.Vertex{
-        gx.Model.Vertex{ .position = .{ -0.5, -0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ -0.5, 0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ -0.5, -0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ -0.5, -0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ -0.5, 0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ -0.5, 0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ 0.5, -0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ 0.5, 0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ 0.5, -0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ 0.5, -0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ 0.5, 0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ 0.5, 0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ -0.5, -0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ 0.5, -0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ -0.5, -0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ -0.5, -0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ 0.5, -0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ 0.5, -0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ -0.5, 0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ 0.5, 0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ -0.5, 0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ -0.5, 0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ 0.5, 0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ 0.5, 0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ -0.5, -0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ 0.5, 0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ -0.5, 0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ -0.5, -0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ 0.5, -0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ 0.5, 0.5, 0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ -0.5, -0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ 0.5, 0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ -0.5, 0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ -0.5, -0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ 0.5, -0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
-        gx.Model.Vertex{ .position = .{ 0.5, 0.5, -0.5 }, .uv = .{ 0.0, 0.0 } },
-    };
+    var shape = px.LockedCube.cube1x1();
+    shape.max[2] = 4.0;
+    shape.min[2] = 0.0;
+    const vertices = shape.vertices();
 
     var triangle_model = try gx.Model.init(&logical_device, &vertices, null);
 
-    try game_world.spawn(.{ .transform = .{ .{ 10.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .aabb = px.LockedCube.cube1x1() }, "cube0");
-    try game_world.spawn(.{ .transform = .{ .{ 0.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .aabb = px.LockedCube.cube1x1() }, "cube1");
+    try game_world.spawn(.{ .transform = .{ .{ 10.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .aabb = shape }, "cube0");
+    try game_world.spawn(.{ .transform = .{ .{ 0.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .aabb = shape }, "cube1");
 
     const Keyboard = struct {
         w: bool,
