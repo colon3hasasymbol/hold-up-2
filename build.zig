@@ -16,14 +16,18 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const exe = b.addExecutable(.{
-        .name = "holup",
+        .name = "hle",
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
 
+    exe.addCSourceFile(.{ .file = b.path("stb_image.c") });
+
     const zmath = b.dependency("zmath", .{});
     exe.root_module.addImport("zmath", zmath.module("root"));
+
+    exe.addIncludePath(b.path("."));
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
@@ -55,4 +59,7 @@ pub fn build(b: *std.Build) void {
 
     exe.linkLibC();
     exe.linkSystemLibrary("SDL2");
+    if (target.result.os.tag == .linux) {
+        exe.linkSystemLibrary("pulse");
+    }
 }

@@ -1,5 +1,5 @@
 const std = @import("std");
-const c = @cImport({
+pub const c = @cImport({
     @cDefine("VK_NO_PROTOTYPES", {});
     @cInclude("vulkan/vulkan.h");
     @cInclude("SDL2/SDL.h");
@@ -10,6 +10,8 @@ pub const AllocationCallbacks = ?*c.VkAllocationCallbacks;
 
 pub const VertexAttribute = c.VkVertexInputAttributeDescription;
 pub const VertexBinding = c.VkVertexInputBindingDescription;
+
+pub const ClearColor = struct { r: f32, g: f32, b: f32, a: f32 };
 
 pub const ShaderStage = struct {
     pub const VERTEX_BIT: u32 = 1;
@@ -452,6 +454,10 @@ pub const LogicalDevice = struct {
         MapMemory: std.meta.Child(c.PFN_vkMapMemory) = undefined,
         UnmapMemory: std.meta.Child(c.PFN_vkUnmapMemory) = undefined,
         CmdBindVertexBuffers: std.meta.Child(c.PFN_vkCmdBindVertexBuffers) = undefined,
+        QueueWaitIdle: std.meta.Child(c.PFN_vkQueueWaitIdle) = undefined,
+        FreeCommandBuffers: std.meta.Child(c.PFN_vkFreeCommandBuffers) = undefined,
+        CmdCopyBuffer: std.meta.Child(c.PFN_vkCmdCopyBuffer) = undefined,
+        CmdCopyBufferToImage: std.meta.Child(c.PFN_vkCmdCopyBufferToImage) = undefined,
     };
 
     handle: c.VkDevice,
@@ -575,10 +581,11 @@ pub const Image = struct {
     device: *const LogicalDevice,
     allocation_callbacks: AllocationCallbacks,
     should_destroy_image: bool,
+    extent: c.VkExtent3D,
 
-    pub fn init(device: *const LogicalDevice, create_info: *c.VkImageCreateInfo, allocation_callbacks: AllocationCallbacks) !@This() {
+    pub fn init(device: *const LogicalDevice, create_info: c.VkImageCreateInfo, allocation_callbacks: AllocationCallbacks) !@This() {
         var handle: c.VkImage = undefined;
-        if (device.dispatch.CreateImage(device.handle, create_info, allocation_callbacks, &handle) < 0) return error.VkCreateImage;
+        if (device.dispatch.CreateImage(device.handle, &create_info, allocation_callbacks, &handle) < 0) return error.VkCreateImage;
 
         return .{
             .handle = handle,
@@ -587,10 +594,11 @@ pub const Image = struct {
             .device = device,
             .allocation_callbacks = allocation_callbacks,
             .should_destroy_image = true,
+            .extent = create_info.extent,
         };
     }
 
-    pub fn fromHandle(device: *const LogicalDevice, handle: c.VkImage, allocation_callbacks: AllocationCallbacks) @This() {
+    pub fn fromHandle(device: *const LogicalDevice, handle: c.VkImage, extent: c.VkExtent3D, allocation_callbacks: AllocationCallbacks) @This() {
         return .{
             .handle = handle,
             .view = null,
@@ -598,6 +606,7 @@ pub const Image = struct {
             .device = device,
             .allocation_callbacks = allocation_callbacks,
             .should_destroy_image = false,
+            .extent = extent,
         };
     }
 
@@ -627,6 +636,60 @@ pub const Image = struct {
         self.memory = try self.device.allocateMemory(properties, requirements, self.allocation_callbacks);
 
         if (self.device.dispatch.BindImageMemory(self.device.handle, self.handle, self.memory, 0) < 0) return error.VkBindImageMemory;
+    }
+
+    pub fn uploadData(self: *@This(), data: anytype, command_pool: *CommandPool) !void {
+        var staging_buffer = try Buffer.init(self.device, data.len * @sizeOf(@TypeOf(data[0])), BufferUsage.TRANSFER_SRC_BIT, self.allocation_callbacks);
+        defer staging_buffer.deinit();
+        try staging_buffer.createMemory(MemoryProperty.HOST_VISIBLE_BIT | MemoryProperty.HOST_COHERENT_BIT);
+        try staging_buffer.uploadData(data);
+
+        try self.transitionLayout(c.VK_IMAGE_LAYOUT_UNDEFINED, c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, command_pool);
+        try staging_buffer.copyToImage(self, self.extent.width, self.extent.height, self.extent.depth, command_pool);
+        try self.transitionLayout(c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, command_pool);
+    }
+
+    pub fn transitionLayout(self: *@This(), old_layout: c.VkImageLayout, new_layout: c.VkImageLayout, command_pool: *CommandPool) !void {
+        var command_buffer = try command_pool.beginSingleTimeCommands();
+
+        var barrier = std.mem.zeroInit(c.VkImageMemoryBarrier, c.VkImageMemoryBarrier{
+            .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .oldLayout = old_layout,
+            .newLayout = new_layout,
+            .srcQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+            .image = self.handle,
+            .subresourceRange = c.VkImageSubresourceRange{
+                .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+        });
+
+        var src_stage: u32 = undefined;
+        var dst_stage: u32 = undefined;
+
+        if (old_layout == c.VK_IMAGE_LAYOUT_UNDEFINED and new_layout == c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+            barrier.srcAccessMask = 0;
+            barrier.dstAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT;
+
+            src_stage = c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            dst_stage = c.VK_PIPELINE_STAGE_TRANSFER_BIT;
+        } else if (old_layout == c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL and new_layout == c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+            barrier.srcAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT;
+            barrier.dstAccessMask = c.VK_ACCESS_SHADER_READ_BIT;
+
+            src_stage = c.VK_PIPELINE_STAGE_TRANSFER_BIT;
+            dst_stage = c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        } else {
+            return error.UnsupportedLayoutTransition;
+        }
+
+        self.device.dispatch.CmdPipelineBarrier(command_buffer.handle, src_stage, dst_stage, 0, 0, null, 0, null, 1, &barrier);
+
+        try command_pool.endSingleTimeCommands(&command_buffer);
     }
 };
 
@@ -677,9 +740,35 @@ pub const Buffer = struct {
         @memcpy(@as([*]u8, @ptrCast(mapped)), @as([*]u8, @ptrCast(@constCast(data.ptr)))[0 .. data.len * @sizeOf(@TypeOf(data[0]))]);
         self.device.dispatch.UnmapMemory(self.device.handle, self.memory);
     }
-};
 
-pub const ClearColor = struct { r: f32, g: f32, b: f32, a: f32 };
+    pub fn copy(self: *@This(), dst: *@This(), size: u64, command_pool: *CommandPool) !void {
+        const command_buffer = try command_pool.beginSingleTimeCommands();
+        command_buffer.copyBuffer(self, dst, size);
+        try command_pool.endSingleTimeCommands(&command_buffer);
+    }
+
+    pub fn copyToImage(self: *@This(), dst: *Image, width: u32, height: u32, depth: u32, command_pool: *CommandPool) !void {
+        var command_buffer = try command_pool.beginSingleTimeCommands();
+
+        const region = std.mem.zeroInit(c.VkBufferImageCopy, c.VkBufferImageCopy{
+            .imageSubresource = c.VkImageSubresourceLayers{
+                .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+                .mipLevel = 0,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+            .imageExtent = c.VkExtent3D{
+                .width = width,
+                .height = height,
+                .depth = depth,
+            },
+        });
+
+        self.device.dispatch.CmdCopyBufferToImage(command_buffer.handle, self.handle, dst.handle, c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+        try command_pool.endSingleTimeCommands(&command_buffer);
+    }
+};
 
 pub const Swapchain = struct {
     handle: c.VkSwapchainKHR,
@@ -765,7 +854,7 @@ pub const Swapchain = struct {
         errdefer allocator.free(color_images);
 
         for (color_image_handles, color_images) |color_image_handle, *color_image| {
-            color_image.* = Image.fromHandle(device, color_image_handle, allocation_callbacks);
+            color_image.* = Image.fromHandle(device, color_image_handle, .{ .width = extent.width, .height = extent.height, .depth = 1 }, allocation_callbacks);
             try color_image.createView(
                 c.VK_IMAGE_VIEW_TYPE_2D,
                 create_info.imageFormat,
@@ -866,7 +955,7 @@ pub const Swapchain = struct {
                 .flags = 0,
             });
 
-            depth_images[i] = try Image.init(device, @constCast(&image_create_info), allocation_callbacks);
+            depth_images[i] = try Image.init(device, image_create_info, allocation_callbacks);
             try depth_images[i].createMemory(c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
             try depth_images[i].createView(
                 c.VK_IMAGE_VIEW_TYPE_2D,
@@ -1095,6 +1184,45 @@ pub const CommandPool = struct {
 
         return results;
     }
+
+    pub fn beginSingleTimeCommands(self: *@This()) !CommandBuffer {
+        const alloc_info = std.mem.zeroInit(c.VkCommandBufferAllocateInfo, c.VkCommandBufferAllocateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            .commandPool = self.handle,
+            .commandBufferCount = 1,
+        });
+
+        var command_buffer: c.VkCommandBuffer = undefined;
+        if (self.device.dispatch.AllocateCommandBuffers(self.device.handle, &alloc_info, &command_buffer) < 0) return error.VkAllocateCommandBuffer;
+
+        const begin_info = std.mem.zeroInit(c.VkCommandBufferBeginInfo, c.VkCommandBufferBeginInfo{
+            .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .flags = c.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+        });
+
+        if (self.device.dispatch.BeginCommandBuffer(command_buffer, &begin_info) < 0) return error.VkBeginCommandBuffer;
+
+        return .{
+            .handle = command_buffer,
+            .device = self.device,
+        };
+    }
+
+    pub fn endSingleTimeCommands(self: *@This(), command_buffer: *CommandBuffer) !void {
+        try command_buffer.end();
+
+        const submit_info = std.mem.zeroInit(c.VkSubmitInfo, c.VkSubmitInfo{
+            .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &command_buffer.handle,
+        });
+
+        _ = self.device.dispatch.QueueSubmit(self.device.graphics_queue, 1, &submit_info, @ptrCast(c.VK_NULL_HANDLE));
+        _ = self.device.dispatch.QueueWaitIdle(self.device.graphics_queue);
+
+        self.device.dispatch.FreeCommandBuffers(self.device.handle, self.handle, 1, &command_buffer.handle);
+    }
 };
 
 pub const CommandBuffer = struct {
@@ -1115,6 +1243,11 @@ pub const CommandBuffer = struct {
 
     pub fn pushConstants(self: *@This(), pipeline_layout: c.VkPipelineLayout, shader_stage: c.VkShaderStageFlags, push_constant_data: anytype) void {
         self.device.dispatch.CmdPushConstants(self.handle, pipeline_layout, shader_stage, 0, @sizeOf(@TypeOf(push_constant_data.*)), push_constant_data);
+    }
+
+    pub fn copyBuffer(self: *@This(), src_buffer: *Buffer, dst_buffer: *Buffer, size: u64) void {
+        const copy_region = std.mem.zeroInit(c.VkBufferCopy, c.VkBufferCopy{ .size = size });
+        self.device.dispatch.CmdCopyBuffer(self.handle, src_buffer.handle, dst_buffer.handle, 1, &copy_region);
     }
 };
 

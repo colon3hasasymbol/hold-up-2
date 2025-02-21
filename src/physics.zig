@@ -294,7 +294,39 @@ pub fn signedVolume2D(s1: zmath.Vec, s2: zmath.Vec, s3: zmath.Vec) zmath.Vec {
     if (compareSigns(area_max, areas[0]) and compareSigns(area_max, areas[1]) and compareSigns(area_max, areas[2])) {
         return areas / area_max;
     }
+
+    var dist = std.math.floatMax(f32);
+    var lambdas = zmath.Vec{ 1.0, 0.0, 0.0, 0.0 };
+    for (0..3) |i| {
+        const k = @mod(i + 1, 3);
+        const l = @mod(i + 2, 3);
+
+        const edges_pts = [_]zmath.Vec{ s1, s2, s3 };
+
+        const lambda_edge = signedVolume1D(edges_pts[k], edges_pts[l]);
+        const pt = zmath.mul(edges_pts[k], lambda_edge[0]) + zmath.mul(edges_pts[l], lambda_edge[1]);
+        const len_sqr = zmath.lengthSq3(pt);
+        if (len_sqr < dist) {
+            dist = len_sqr;
+            lambdas[i] = 0.0;
+            lambdas[k] = lambda_edge[0];
+            lambdas[l] = lambda_edge[1];
+        }
+    }
+
+    return lambdas;
 }
+
+// pub fn signedVolume3D(s1: zmath.Vec, s2: zmath.Vec, s3: zmath.Vec, s4: zmath.Vec) zmath.Vec {
+//     const m = zmath.Mat{
+//         .{s1[0], s2[0], s3[0], s4[0]},
+//         .{s1[1], s2[1], s3[1], s4[1]},
+//         .{s1[2], s2[2], s3[2], s4[2]},
+//         .{1.0, 1.0, 1.0, 1.0},
+//     };
+
+//     const c4 = zmath.Vec{zmath.}
+// }
 
 // pub fn simplexSignedVolumes(points: [][3]zmath.Vec, new_dir: zmath.Vec) struct { does_intersect: bool, lambdas: zmath.Vec } {
 //     const epsilonf = 0.0001 * 0.0001;

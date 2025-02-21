@@ -1,5 +1,9 @@
 const std = @import("std");
 
+const stbi = @cImport({
+    @cInclude("stb_image.h");
+});
+
 const vk = @import("vulkan.zig");
 
 pub const Model = struct {
@@ -58,8 +62,7 @@ pub const Model = struct {
     }
 
     pub fn deinit(self: *@This()) void {
-        self.device.dispatch.DestroyBuffer(self.device.handle, self.vertex_buffer, self.allocation_callbacks);
-        self.device.freeMemory(self.vertex_memory, self.allocation_callbacks);
+        self.vertex_buffer.deinit();
     }
 
     pub fn bind(self: *@This(), command_buffer: *vk.CommandBuffer) void {
@@ -68,5 +71,52 @@ pub const Model = struct {
 
     pub fn draw(self: *@This(), command_buffer: *vk.CommandBuffer) void {
         self.device.dispatch.CmdDraw(command_buffer.handle, self.vertex_count, 1, 0, 0);
+    }
+};
+
+pub const Texture = struct {
+    image: vk.Image,
+
+    pub fn init(device: *const vk.LogicalDevice, command_pool: *vk.CommandPool, file_path: []const u8, allocation_callbacks: vk.AllocationCallbacks) !@This() {
+        var texture_width: c_int = undefined;
+        var texture_height: c_int = undefined;
+        var texture_channels: c_int = undefined;
+
+        const pixels = stbi.stbi_load(@ptrCast(file_path), &texture_width, &texture_height, &texture_channels, stbi.STBI_rgb_alpha);
+        if (pixels == null) return error.StbiLoad;
+        defer stbi.stbi_image_free(pixels);
+        const size: u64 = @as(u64, @intCast(texture_width)) * @as(u64, @intCast(texture_height)) * 4;
+
+        const image_create_info = std.mem.zeroInit(vk.c.VkImageCreateInfo, vk.c.VkImageCreateInfo{
+            .sType = vk.c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+            .imageType = vk.c.VK_IMAGE_TYPE_2D,
+            .extent = .{
+                .width = @intCast(texture_width),
+                .height = @intCast(texture_height),
+                .depth = 1,
+            },
+            .mipLevels = 1,
+            .arrayLayers = 1,
+            .format = vk.c.VK_FORMAT_R8G8B8A8_SRGB,
+            .tiling = vk.c.VK_IMAGE_TILING_OPTIMAL,
+            .initialLayout = vk.c.VK_IMAGE_LAYOUT_UNDEFINED,
+            .usage = vk.c.VK_IMAGE_USAGE_TRANSFER_DST_BIT | vk.c.VK_IMAGE_USAGE_SAMPLED_BIT,
+            .samples = vk.c.VK_SAMPLE_COUNT_1_BIT,
+            .sharingMode = vk.c.VK_SHARING_MODE_EXCLUSIVE,
+            .flags = 0,
+        });
+
+        var image = try vk.Image.init(device, image_create_info, allocation_callbacks);
+        errdefer image.deinit();
+        try image.createMemory(vk.c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        try image.uploadData(pixels[0..size], command_pool);
+
+        return .{
+            .image = image,
+        };
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.image.deinit();
     }
 };

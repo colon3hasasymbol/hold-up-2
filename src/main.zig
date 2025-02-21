@@ -100,10 +100,8 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     var pipeline = try vk.Pipeline.init(&logical_device, pipeline_layout, swapchain.render_pass, &frag_shader, &vert_shader, window_extent, gx.Model.Vertex.getAttributeDescriptions(), gx.Model.Vertex.getBindingDescriptions(), null);
     defer pipeline.deinit();
 
-    window.show();
-
-    var is_colliding = false;
-    var was_colliding = true;
+    var texture = try gx.Texture.init(&logical_device, &command_pool, "textures/map.png", null);
+    defer texture.deinit();
 
     var shape = px.LockedCube.cube1x1();
     shape.max[2] = 4.0;
@@ -111,9 +109,14 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     const vertices = shape.vertices();
 
     var triangle_model = try gx.Model.init(&logical_device, &vertices, null);
+    defer triangle_model.deinit();
 
-    try game_world.spawn(.{ .transform = .{ .{ 10.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .aabb = shape }, "cube0");
-    try game_world.spawn(.{ .transform = .{ .{ 0.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .aabb = shape }, "cube1");
+    try game_world.spawn(.{ .transform = .{ .{ 0.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .aabb = shape }, "segment0");
+    try game_world.spawn(.{ .transform = .{ .{ 0.0, 4.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .aabb = shape }, "segment1");
+    try game_world.spawn(.{ .transform = .{ .{ 0.0, 8.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .aabb = shape }, "segment2");
+
+    // const start = zmath.Vec{ 0.0, 0.0, 0.0, 0.0 };
+    // const end = zmath.Vec{ 8.5, 0.0, 0.0, 0.0 };
 
     const Keyboard = struct {
         w: bool,
@@ -140,6 +143,8 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     var push_constant_data = PushConstantData{
         .vp = zmath.identity(),
     };
+
+    window.show();
 
     main_loop: while (true) {
         var event: c.SDL_Event = undefined;
@@ -217,7 +222,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
         if (keyboard.left) camera_rotation[1] -= 0.01;
 
         var world_to_view = zmath.inverse(zmath.translation(camera_position[0], camera_position[1], camera_position[2]));
-        world_to_view = zmath.mul(world_to_view, zmath.mul(zmath.rotationX(camera_rotation[0]), zmath.rotationY(camera_rotation[1])));
+        world_to_view = zmath.mul(world_to_view, zmath.mul(zmath.rotationY(camera_rotation[1]), zmath.rotationX(camera_rotation[0])));
 
         const view_to_clip = zmath.perspectiveFovRh(0.25 * std.math.pi, 1, 0.1, 200.0);
 
@@ -236,7 +241,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
         while (object_iterator.next()) |*object| {
             if (object.value_ptr.model) |model| {
                 if (object.value_ptr.transform) |transform| {
-                    const object_to_world = zmath.mul(zmath.translation(transform[0][0], transform[0][1], transform[0][2]), zmath.matFromRollPitchYaw(transform[1][0], transform[1][1], transform[1][2]));
+                    const object_to_world = zmath.mul(zmath.matFromRollPitchYaw(transform[1][0], transform[1][1], transform[1][2]), zmath.translation(transform[0][0], transform[0][1], transform[0][2]));
                     push_constant_data.vp = zmath.mul(object_to_world, world_to_clip);
                 } else {
                     push_constant_data.vp = world_to_clip;
@@ -253,29 +258,9 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
         try swapchain.submitCommandBuffers(&command_buffer, image_index);
 
-        const cube0 = game_world.objects.getPtr("cube0").?;
-        const cube1 = game_world.objects.getPtr("cube1").?;
-
-        var cube0position = &cube0.transform.?[0];
-        const cube1position = cube1.transform.?[0];
-
-        if (keyboard.i) cube0position[2] -= 0.1;
-        if (keyboard.k) cube0position[2] += 0.1;
-        if (keyboard.j) cube0position[0] -= 0.1;
-        if (keyboard.l) cube0position[0] += 0.1;
-
-        const cube0aabb = cube0.aabb.?;
-        const cube1aabb = cube1.aabb.?;
-
-        is_colliding = cube0aabb.translate(cube0position.*).overlapping(cube1aabb.translate(cube1position));
-
-        if (was_colliding and !is_colliding) {
-            std.debug.print("is_colliding: false\n", .{});
-        }
-        if (is_colliding and !was_colliding) {
-            std.debug.print("is_colliding: true\n", .{});
-        }
-        was_colliding = is_colliding;
+        // const segment0 = game_world.objects.getPtr("segment0").?;
+        // const segment1 = game_world.objects.getPtr("segment1").?;
+        // const segment2 = game_world.objects.getPtr("segment2").?;
     }
 }
 
@@ -283,6 +268,12 @@ pub fn main() !void {
     var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{ .verbose_log = true }){};
     defer std.debug.assert(general_purpose_allocator.deinit() == .ok);
     const allocator = general_purpose_allocator.allocator();
+
+    const exe_path = try std.fs.selfExeDirPathAlloc(allocator);
+    defer allocator.free(exe_path);
+    var dir = try std.fs.cwd().openDir(exe_path, .{});
+    defer dir.close();
+    try dir.setAsCwd();
 
     try conventional(allocator);
 }
