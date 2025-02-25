@@ -93,6 +93,16 @@ pub const VertexInputRate = struct {
     pub const PER_INSTANCE: c_uint = 1;
 };
 
+pub const ImageViewType = struct {
+    pub const TYPE_1D: c_int = 0;
+    pub const TYPE_2D: c_int = 1;
+    pub const TYPE_3D: c_int = 2;
+    pub const TYPE_CUBE: c_int = 3;
+    pub const TYPE_1D_ARRAY: c_int = 4;
+    pub const TYPE_2D_ARRAY: c_int = 5;
+    pub const TYPE_CUBE_ARRAY: c_int = 6;
+};
+
 pub const Library = struct {
     get_instance_proc_addr: std.meta.Child(c.PFN_vkGetInstanceProcAddr),
 
@@ -198,6 +208,7 @@ pub const Instance = struct {
         GetPhysicalDeviceSurfacePresentModesKHR: std.meta.Child(c.PFN_vkGetPhysicalDeviceSurfacePresentModesKHR) = undefined,
         GetPhysicalDeviceMemoryProperties: std.meta.Child(c.PFN_vkGetPhysicalDeviceMemoryProperties) = undefined,
         CreateGraphicsPipelines: std.meta.Child(c.PFN_vkCreateGraphicsPipelines) = undefined,
+        GetPhysicalDeviceFeatures: std.meta.Child(c.PFN_vkGetPhysicalDeviceFeatures) = undefined,
     };
 
     handle: c.VkInstance,
@@ -272,6 +283,13 @@ pub const Instance = struct {
         return allocation;
     }
 
+    pub fn getPhysicalDeviceFeatures(self: *const @This(), physical_device: c.VkPhysicalDevice) c.VkPhysicalDeviceFeatures {
+        var result: c.VkPhysicalDeviceFeatures = undefined;
+        self.dispatch.GetPhysicalDeviceFeatures(physical_device, &result);
+
+        return result;
+    }
+
     pub fn requestPhysicalDevice(self: *const @This(), allocator: std.mem.Allocator, maybe_surface: ?*Surface) !PhysicalDevice {
         const physical_devices = try self.enumeratePhysicalDevices(allocator);
         defer allocator.free(physical_devices);
@@ -279,6 +297,8 @@ pub const Instance = struct {
         for (physical_devices) |physical_device| {
             const queue_families_properties = try self.getPhysicalDeviceQueueFamilyProperties(physical_device, allocator);
             defer allocator.free(queue_families_properties);
+
+            const features = self.getPhysicalDeviceFeatures(physical_device);
 
             var graphics_queue_family_index: ?u32 = null;
             var present_queue_family_index: ?u32 = null;
@@ -290,7 +310,7 @@ pub const Instance = struct {
                 if (is_surface_supported) present_queue_family_index = @intCast(index);
                 if ((queue_family_properties.queueFlags & c.VK_QUEUE_GRAPHICS_BIT) != 0) graphics_queue_family_index = @intCast(index);
 
-                if (graphics_queue_family_index != null and present_queue_family_index != null) return PhysicalDevice.init(physical_device, self, graphics_queue_family_index.?, present_queue_family_index.?);
+                if (graphics_queue_family_index != null and present_queue_family_index != null and features.samplerAnisotropy == c.VK_TRUE) return PhysicalDevice.init(physical_device, self, graphics_queue_family_index.?, present_queue_family_index.?);
             }
         }
 
@@ -341,25 +361,23 @@ pub const PhysicalDevice = struct {
     handle: c.VkPhysicalDevice,
     graphics_queue_family_index: u32,
     present_queue_family_index: u32,
+    properties: c.VkPhysicalDeviceProperties,
 
-    pub fn init(handle: c.VkPhysicalDevice, instance: *const Instance, graphics_queue_family_index: u32, present_queue_family_index: u32) !@This() {
+    pub fn init(handle: c.VkPhysicalDevice, instance: *const Instance, graphics_queue_family_index: u32, present_queue_family_index: u32) @This() {
+        var properties: c.VkPhysicalDeviceProperties = undefined;
+        instance.dispatch.GetPhysicalDeviceProperties(handle, &properties);
+
         return .{
             .instance = instance,
             .handle = handle,
             .graphics_queue_family_index = graphics_queue_family_index,
             .present_queue_family_index = present_queue_family_index,
+            .properties = properties,
         };
     }
 
     pub fn createLogicalDevice(self: *const @This(), allocation_callbacks: AllocationCallbacks) !LogicalDevice {
         return LogicalDevice.init(self, allocation_callbacks);
-    }
-
-    pub fn getProperties(self: *const @This()) c.VkPhysicalDeviceProperties {
-        var result: c.VkPhysicalDeviceProperties = undefined;
-        self.instance.dispatch.GetPhysicalDeviceProperties(self.handle, &result);
-
-        return result;
     }
 
     pub fn getSwapchainSupport(self: *const @This(), surface: *const Surface, allocator: std.mem.Allocator) !SwapChainSupportDetails {
@@ -458,6 +476,8 @@ pub const LogicalDevice = struct {
         FreeCommandBuffers: std.meta.Child(c.PFN_vkFreeCommandBuffers) = undefined,
         CmdCopyBuffer: std.meta.Child(c.PFN_vkCmdCopyBuffer) = undefined,
         CmdCopyBufferToImage: std.meta.Child(c.PFN_vkCmdCopyBufferToImage) = undefined,
+        CreateSampler: std.meta.Child(c.PFN_vkCreateSampler) = undefined,
+        DestroySampler: std.meta.Child(c.PFN_vkDestroySampler) = undefined,
     };
 
     handle: c.VkDevice,
@@ -489,12 +509,17 @@ pub const LogicalDevice = struct {
             c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
         };
 
+        const enabled_features = std.mem.zeroInit(c.VkPhysicalDeviceFeatures, c.VkPhysicalDeviceFeatures{
+            .samplerAnisotropy = c.VK_TRUE,
+        });
+
         const create_info = std.mem.zeroInit(c.VkDeviceCreateInfo, c.VkDeviceCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
             .queueCreateInfoCount = if (physical_device.graphics_queue_family_index == physical_device.present_queue_family_index) 1 else 2,
             .pQueueCreateInfos = &queue_create_infos,
             .enabledExtensionCount = @as(u32, extensions.len),
             .ppEnabledExtensionNames = &extensions,
+            .pEnabledFeatures = &enabled_features,
         });
 
         var handle: c.VkDevice = undefined;
@@ -1434,5 +1459,45 @@ pub const Pipeline = struct {
 
     pub fn bind(self: *@This(), command_buffer: *CommandBuffer) void {
         self.device.dispatch.CmdBindPipeline(command_buffer.handle, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.handle);
+    }
+};
+
+pub const Sampler = struct {
+    handle: c.VkSampler,
+    device: *const LogicalDevice,
+    allocation_callbacks: AllocationCallbacks,
+
+    pub fn init(device: *const LogicalDevice, allocation_callbacks: AllocationCallbacks) !@This() {
+        const create_info = std.mem.zeroInit(c.VkSamplerCreateInfo, c.VkSamplerCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+            .addressModeU = c.VK_SAMPLER_ADDRESS_MODE_REPEAT,
+            .addressModeV = c.VK_SAMPLER_ADDRESS_MODE_REPEAT,
+            .addressModeW = c.VK_SAMPLER_ADDRESS_MODE_REPEAT,
+            .magFilter = c.VK_FILTER_LINEAR,
+            .minFilter = c.VK_FILTER_LINEAR,
+            .anisotropyEnable = c.VK_TRUE,
+            .maxAnisotropy = device.physical_device.properties.limits.maxSamplerAnisotropy,
+            .borderColor = c.VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+            .unnormalizedCoordinates = c.VK_FALSE,
+            .compareEnable = c.VK_FALSE,
+            .compareOp = c.VK_COMPARE_OP_ALWAYS,
+            .mipmapMode = c.VK_SAMPLER_MIPMAP_MODE_LINEAR,
+            .mipLodBias = 0.0,
+            .minLod = 0.0,
+            .maxLod = 0.0,
+        });
+
+        var handle: c.VkSampler = undefined;
+        if (device.dispatch.CreateSampler(device.handle, &create_info, allocation_callbacks, &handle) < 0) return error.VkCreateSampler;
+
+        return .{
+            .handle = handle,
+            .device = device,
+            .allocation_callbacks = allocation_callbacks,
+        };
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.device.dispatch.DestroySampler(self.device.handle, self.handle, self.allocation_callbacks);
     }
 };

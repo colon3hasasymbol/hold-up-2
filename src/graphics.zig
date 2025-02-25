@@ -76,6 +76,7 @@ pub const Model = struct {
 
 pub const Texture = struct {
     image: vk.Image,
+    sampler: vk.Sampler,
 
     pub fn init(device: *const vk.LogicalDevice, command_pool: *vk.CommandPool, file_path: []const u8, allocation_callbacks: vk.AllocationCallbacks) !@This() {
         var texture_width: c_int = undefined;
@@ -110,13 +111,18 @@ pub const Texture = struct {
         errdefer image.deinit();
         try image.createMemory(vk.c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
         try image.uploadData(pixels[0..size], command_pool);
+        try image.createView(vk.ImageViewType.TYPE_2D, vk.c.VK_FORMAT_R8G8B8A8_SRGB, .{ .aspectMask = vk.c.VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1 });
+
+        const sampler = try vk.Sampler.init(device, allocation_callbacks);
 
         return .{
             .image = image,
+            .sampler = sampler,
         };
     }
 
     pub fn deinit(self: *@This()) void {
         self.image.deinit();
+        self.sampler.deinit();
     }
 };

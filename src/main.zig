@@ -9,6 +9,8 @@ const vk = @import("vulkan.zig");
 const gx = @import("graphics.zig");
 const px = @import("physics.zig");
 
+const AudioLinux = @import("audio_linux.zig");
+
 pub const GameWorld = struct {
     pub const Object = struct {
         model: ?*gx.Model,
@@ -100,7 +102,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     var pipeline = try vk.Pipeline.init(&logical_device, pipeline_layout, swapchain.render_pass, &frag_shader, &vert_shader, window_extent, gx.Model.Vertex.getAttributeDescriptions(), gx.Model.Vertex.getBindingDescriptions(), null);
     defer pipeline.deinit();
 
-    var texture = try gx.Texture.init(&logical_device, &command_pool, "textures/map.png", null);
+    var texture = try gx.Texture.init(&logical_device, &command_pool, "textures/the f word :3.png", null);
     defer texture.deinit();
 
     var shape = px.LockedCube.cube1x1();
@@ -269,11 +271,16 @@ pub fn main() !void {
     defer std.debug.assert(general_purpose_allocator.deinit() == .ok);
     const allocator = general_purpose_allocator.allocator();
 
-    const exe_path = try std.fs.selfExeDirPathAlloc(allocator);
-    defer allocator.free(exe_path);
-    var dir = try std.fs.cwd().openDir(exe_path, .{});
-    defer dir.close();
-    try dir.setAsCwd();
+    {
+        const exe_path = try std.fs.selfExeDirPathAlloc(allocator);
+        defer allocator.free(exe_path);
+        var dir = try std.fs.cwd().openDir(exe_path, .{});
+        defer dir.close();
+        try dir.setAsCwd();
+    }
 
     try conventional(allocator);
+
+    // var audio = try AudioLinux.init();
+    // defer audio.deinit();
 }
