@@ -3,7 +3,7 @@ const zmath = @import("zmath");
 
 const gx = @import("graphics.zig");
 
-pub const LockedCube = struct {
+pub const BoundingBox = struct {
     min: zmath.Vec,
     max: zmath.Vec,
 
@@ -72,60 +72,11 @@ pub const LockedCube = struct {
     }
 };
 
-// const Vec3 origin( 0.0f );
-
-// int numPts = 1;
-// point_t simplexPoints[ 4 ];
-// simplexPoints[ 0 ] = Support( bodyA, bodyB, Vec3( 1, 1, 1 ), 0.0f );
-
-// float closestDist = 1e10f;
-// bool doesContainOrigin = false;
-// Vec3 newDir = simplexPoints[ 0 ].xyz * -1.0f;
-// do {
-// 	// Get the new point to check on
-// 	point_t newPt = Support( bodyA, bodyB, newDir, 0.0f );
-
-// 	// If the new point is the same as a previous point, then we can't expand any further
-// 	if ( HasPoint( simplexPoints, newPt ) ) {
-// 		break;
-// 	}
-
-// 	simplexPoints[ numPts ] = newPt;
-// 	numPts++;
-
-// 	// If this new point hasn't moved passed the origin, then the
-// 	// origin cannot be in the set. And therefore there is no collision.
-// 	float dotdot = newDir.Dot( newPt.xyz - origin );
-// 	if ( dotdot < 0.0f ) {
-// 		break;
-// 	}
-
-// 	Vec4 lambdas;
-// 	doesContainOrigin = SimplexSignedVolumes( simplexPoints, numPts, newDir, lambdas );
-// 	if ( doesContainOrigin ) {
-// 		break;
-// 	}
-
-// 	// Check that the new projection of the origin onto the simplex is closer than the previous
-// 	float dist = newDir.GetLengthSqr();
-// 	if ( dist >= closestDist ) {
-// 		break;
-// 	}
-// 	closestDist = dist;
-
-// 	// Use the lambdas that support the new search direction, and invalidate any points that don't support it
-// 	SortValids( simplexPoints, lambdas );
-// 	numPts = NumValids( lambdas );
-// 	doesContainOrigin = ( 4 == numPts );
-// } while ( !doesContainOrigin );
-
-// return doesContainOrigin;
-
 pub const ShapeType = enum { box, sphere };
 
 pub const Shape = union(ShapeType) {
     pub const Box = struct {
-        bounds: LockedCube,
+        bounds: BoundingBox,
 
         pub fn support(self: *const @This(), dir: zmath.Vec, pos: zmath.Vec, rot: zmath.Quat, bias: f32) zmath.Vec {
             const points = [_]zmath.Vec{
@@ -141,10 +92,10 @@ pub const Shape = union(ShapeType) {
 
             // Find the point in furthest in direction
             var max_pt = zmath.rotate(rot, points[0]) + pos;
-            var max_dist = zmath.dot3(max_pt, dir);
+            var max_dist = zmath.dot3(max_pt, dir)[0];
             for (1..points.len - 1) |i| {
                 const pt = zmath.rotate(rot, points[i]) + pos;
-                const dist = zmath.dot3(pt, dir);
+                const dist = zmath.dot3(pt, dir)[0];
 
                 if (dist > max_dist) {
                     max_dist = dist;
@@ -152,7 +103,7 @@ pub const Shape = union(ShapeType) {
                 }
             }
 
-            const norm = zmath.mul(zmath.normalize3(dir), bias);
+            const norm = zmath.normalize3(dir) * @as(zmath.Vec, @splat(bias));
 
             return max_pt + norm;
         }
@@ -162,7 +113,7 @@ pub const Shape = union(ShapeType) {
         radius: f32,
 
         pub fn support(self: *const @This(), dir: zmath.Vec, pos: zmath.Vec, bias: f32) zmath.Vec {
-            return (pos + dir * (self.radius + bias));
+            return (pos + dir * @as(zmath.Vec, @splat(self.radius + bias)));
         }
     };
 
@@ -170,31 +121,37 @@ pub const Shape = union(ShapeType) {
     sphere: Sphere,
 
     pub fn support(self: *const @This(), dir: zmath.Vec, pos: zmath.Vec, rot: zmath.Quat, bias: f32) zmath.Vec {
-        switch (self) {
-            .box => return self.box.support(dir, pos, rot, bias),
-            .sphere => return self.sphere.support(dir, pos, bias),
+        switch (self.*) {
+            .box => |*box| return box.support(dir, pos, rot, bias),
+            .sphere => |*sphere| return sphere.support(dir, pos, bias),
         }
     }
 };
 
-pub fn support(shape1: Shape, pos1: zmath.Vec, rot1: zmath.Quat, shape2: Shape, pos2: zmath.Vec, rot2: zmath.Quat, dir: zmath.Vec, bias: f32) [3]zmath.Vec {
-    const norm_dir = zmath.normalize3(dir);
+pub const Point = struct {
+    xyz: zmath.Vec,
+    pta: zmath.Vec,
+    ptb: zmath.Vec,
+};
 
-    const pt1 = shape1.support(dir, pos1, rot1, bias);
+pub fn support(shape1: Shape, pos1: zmath.Vec, rot1: zmath.Quat, shape2: Shape, pos2: zmath.Vec, rot2: zmath.Quat, dir: zmath.Vec, bias: f32) Point {
+    var norm_dir = zmath.normalize3(dir);
 
-    norm_dir = zmath.mul(norm_dir, -1.0);
+    const pt1 = shape1.support(norm_dir, pos1, rot1, bias);
 
-    const pt2 = shape2.support(dir, pos2, rot2, bias);
+    norm_dir = norm_dir * @as(zmath.Vec, @splat(-1.0));
 
-    return [_]zmath.Vec{ pt1, pt2, pt1 - pt2 };
+    const pt2 = shape2.support(norm_dir, pos2, rot2, bias);
+
+    return .{ .pta = pt1, .ptb = pt2, .xyz = pt1 - pt2 };
 }
 
-pub fn hasPoint(simplex_points: [4][3]zmath.Vec, pt: [3]zmath.Vec) bool {
+pub fn hasPoint(simplex_points: [4]Point, pt: Point) bool {
     const precision: f32 = 1e-6;
 
     for (0..4) |i| {
-        const delta = simplex_points[i][2] - pt[2];
-        if (zmath.lengthSq3(delta) < precision * precision) {
+        const delta = simplex_points[i].xyz - pt.xyz;
+        if (zmath.lengthSq3(delta)[0] < precision * precision) {
             return true;
         }
     }
@@ -212,7 +169,7 @@ pub fn signedVolume1D(s1: zmath.Vec, s2: zmath.Vec) zmath.Vec {
         const mu = s2[i] - s1[i];
         if (mu * mu > mu_max * mu_max) {
             mu_max = mu;
-            index = i;
+            index = @intCast(i);
         }
     }
 
@@ -246,7 +203,7 @@ pub fn compareSigns(a: f32, b: f32) bool {
 
 pub fn signedVolume2D(s1: zmath.Vec, s2: zmath.Vec, s3: zmath.Vec) zmath.Vec {
     const normal = zmath.cross3(s2 - s1, s3 - s1);
-    const p0 = zmath.mul(normal, zmath.dot3(s1, normal) / zmath.lengthSq3(normal));
+    const p0 = normal * (zmath.dot3(s1, normal) / zmath.lengthSq3(normal));
 
     var index: u32 = 0;
     var area_max: f32 = 0.0;
@@ -264,7 +221,7 @@ pub fn signedVolume2D(s1: zmath.Vec, s2: zmath.Vec, s3: zmath.Vec) zmath.Vec {
         const area: f32 = ab[0] * ac[1] - ab[1] * ac[0];
         if (area * area > area_max * area_max) {
             area_max = area;
-            index = i;
+            index = @intCast(i);
         }
     }
 
@@ -292,7 +249,7 @@ pub fn signedVolume2D(s1: zmath.Vec, s2: zmath.Vec, s3: zmath.Vec) zmath.Vec {
     }
 
     if (compareSigns(area_max, areas[0]) and compareSigns(area_max, areas[1]) and compareSigns(area_max, areas[2])) {
-        return areas / area_max;
+        return areas / @as(zmath.Vec, @splat(area_max));
     }
 
     var dist = std.math.floatMax(f32);
@@ -304,8 +261,8 @@ pub fn signedVolume2D(s1: zmath.Vec, s2: zmath.Vec, s3: zmath.Vec) zmath.Vec {
         const edges_pts = [_]zmath.Vec{ s1, s2, s3 };
 
         const lambda_edge = signedVolume1D(edges_pts[k], edges_pts[l]);
-        const pt = zmath.mul(edges_pts[k], lambda_edge[0]) + zmath.mul(edges_pts[l], lambda_edge[1]);
-        const len_sqr = zmath.lengthSq3(pt);
+        const pt = (edges_pts[k] * @as(zmath.Vec, @splat(lambda_edge[0]))) + (edges_pts[l] * @as(zmath.Vec, @splat(lambda_edge[1])));
+        const len_sqr = zmath.lengthSq3(pt)[0];
         if (len_sqr < dist) {
             dist = len_sqr;
             lambdas[i] = 0.0;
@@ -317,64 +274,157 @@ pub fn signedVolume2D(s1: zmath.Vec, s2: zmath.Vec, s3: zmath.Vec) zmath.Vec {
     return lambdas;
 }
 
-// pub fn signedVolume3D(s1: zmath.Vec, s2: zmath.Vec, s3: zmath.Vec, s4: zmath.Vec) zmath.Vec {
-//     const m = zmath.Mat{
-//         .{s1[0], s2[0], s3[0], s4[0]},
-//         .{s1[1], s2[1], s3[1], s4[1]},
-//         .{s1[2], s2[2], s3[2], s4[2]},
-//         .{1.0, 1.0, 1.0, 1.0},
-//     };
+pub fn signedVolume3D(s1: zmath.Vec, s2: zmath.Vec, s3: zmath.Vec, s4: zmath.Vec) zmath.Vec {
+    const m = zmath.Mat{
+        .{ s1[0], s2[0], s3[0], s4[0] },
+        .{ s1[1], s2[1], s3[1], s4[1] },
+        .{ s1[2], s2[2], s3[2], s4[2] },
+        .{ 1.0, 1.0, 1.0, 1.0 },
+    };
 
-//     const c4 = zmath.Vec{zmath.}
-// }
+    const c4 = zmath.Vec{
+        zmath.cofactor(m, 3, 0),
+        zmath.cofactor(m, 3, 1),
+        zmath.cofactor(m, 3, 2),
+        zmath.cofactor(m, 3, 3),
+    };
 
-// pub fn simplexSignedVolumes(points: [][3]zmath.Vec, new_dir: zmath.Vec) struct { does_intersect: bool, lambdas: zmath.Vec } {
-//     const epsilonf = 0.0001 * 0.0001;
+    const detm = c4[0] + c4[1] + c4[2] + c4[3];
 
-//     var lambdas = zmath.Vec{0.0, 0.0, 0.0, 0.0};
+    if (compareSigns(detm, c4[0]) and compareSigns(detm, c4[1]) and compareSigns(detm, c4[2]) and compareSigns(detm, c4[3])) return c4 * @as(zmath.Vec, @splat(1.0 / detm));
 
-//     var does_intersect = false;
+    var lambdas: zmath.Vec = undefined;
+    var dist = std.math.floatMax(f32);
+    for (0..4) |i| {
+        const j = @mod(i + 1, 4);
+        const k = @mod(i + 2, 4);
 
-//     switch (points.len) {
-//         2 => {
-//             Vec2 lambdas = SignedVolume1D( pts[ 0 ].xyz, pts[ 1 ].xyz );
-// 			Vec3 v( 0.0f );
-// 			for ( int i = 0; i < 2; i++ ) {
-// 				v += pts[ i ].xyz * lambdas[ i ];
-// 			}
-// 			newDir = v * -1.0f;
-// 			doesIntersect = ( v.GetLengthSqr() < epsilonf );
-// 			lambdasOut[ 0 ] = lambdas[ 0 ];
-// 			lambdasOut[ 1 ] = lambdas[ 1 ];
-//         }
-//     }
-// }
+        const face_pts = [_]zmath.Vec{ s1, s2, s3, s4 };
 
-// pub fn intersect(shape1: Shape, pos1: zmath.Vec, rot1: zmath.Quat, shape2: Shape, pos2: zmath.Vec, rot2: zmath.Quat) bool {
-//     const origin: zmath.Vec = .{ 0.0, 0.0, 0.0, 1.0 };
+        const lambdas_face = signedVolume2D(face_pts[i], face_pts[j], face_pts[k]);
+        const pt = face_pts[i] * @as(zmath.Vec, @splat(lambdas_face[0])) * face_pts[j] * @as(zmath.Vec, @splat(lambdas_face[1])) * face_pts[k] * @as(zmath.Vec, @splat(lambdas_face[2]));
+        const len = zmath.lengthSq3(pt)[0];
+        if (len < dist) {
+            dist = len;
+            lambdas = .{ 0.0, 0.0, 0.0, 0.0 };
+            lambdas[i] = lambdas_face[0];
+            lambdas[j] = lambdas_face[1];
+            lambdas[k] = lambdas_face[2];
+        }
+    }
 
-//     var num_pts: u32 = 1;
-//     var simplex_points: [4][3]zmath.Vec = undefined;
+    return lambdas;
+}
 
-//     simplex_points[0] = support(shape1, pos1, rot1, shape2, pos2, rot2, .{ 1.0, 1.0, 1.0, 1.0 }, 0.0);
+pub fn simplexSignedVolumes(points: []Point) struct { does_intersect: bool, lambdas: zmath.Vec, new_dir: zmath.Vec } {
+    const epsilonf = 0.0001 * 0.0001;
 
-//     var closest_dist = std.math.floatMax(f32);
-//     var contains_origin = false;
-//     var new_dir = zmath.mul(simplex_points[0][2], -1.0);
+    var lambdas = zmath.Vec{ 0.0, 0.0, 0.0, 0.0 };
+    var does_intersect = false;
+    var new_dir: zmath.Vec = undefined;
 
-//     while (true) {
-//         const new_pt = support(shape1, pos1, rot1, shape2, pos2, rot2, new_dir, 0.0);
+    switch (points.len) {
+        2 => {
+            lambdas = signedVolume1D(points[0].xyz, points[1].xyz);
+            var v = zmath.Vec{ 0.0, 0.0, 0.0, 0.0 };
+            for (0..2) |i| {
+                v += points[i].xyz * @as(zmath.Vec, @splat(lambdas[i]));
+            }
+            new_dir = v * @as(zmath.Vec, @splat(-1.0));
+            does_intersect = zmath.lengthSq3(v)[0] < epsilonf;
+        },
+        3 => {
+            lambdas = signedVolume2D(points[0].xyz, points[1].xyz, points[2].xyz);
+            var v = zmath.Vec{ 0.0, 0.0, 0.0, 0.0 };
+            for (0..3) |i| {
+                v += points[i].xyz * @as(zmath.Vec, @splat(lambdas[i]));
+            }
+            new_dir = v * @as(zmath.Vec, @splat(-1.0));
+            does_intersect = zmath.lengthSq3(v)[0] < epsilonf;
+        },
+        4 => {
+            lambdas = signedVolume3D(points[0].xyz, points[1].xyz, points[2].xyz, points[3].xyz);
+            var v = zmath.Vec{ 0.0, 0.0, 0.0, 0.0 };
+            for (0..4) |i| {
+                v += points[i].xyz * @as(zmath.Vec, @splat(lambdas[i]));
+            }
+            new_dir = v * @as(zmath.Vec, @splat(-1.0));
+            does_intersect = zmath.lengthSq3(v)[0] < epsilonf;
+        },
+        else => std.debug.panic("what", .{}),
+    }
 
-//         if (hasPoint(simplex_points, new_pt)) break;
+    return .{
+        .does_intersect = does_intersect,
+        .lambdas = lambdas,
+        .new_dir = new_dir,
+    };
+}
 
-//         simplex_points[num_pts] = new_pt;
-//         num_pts += 1;
+pub fn sortValids(simplex_points: *[4]Point, lambdas: *zmath.Vec) void {
+    var valid_lambdas = zmath.Vec{ 0.0, 0.0, 0.0, 0.0 };
+    var valid_count: u32 = 0;
+    var valid_pts = std.mem.zeroes([4]Point);
 
-//         const dotdot = zmath.dot3(new_dir, new_pt[2] - origin);
-//         if (dotdot < 0.0) break;
+    for (0..4) |i| {
+        if (lambdas[i] != 0.0) {
+            valid_pts[valid_count] = simplex_points.*[i];
+            valid_lambdas[valid_count] = lambdas.*[i];
+            valid_count += 1;
+        }
+    }
 
-//         var lambdas: zmath.Vec = undefined;
+    @memcpy(simplex_points, &valid_pts);
+    lambdas.* = valid_lambdas;
+}
 
-//         if (contains_origin) break;
-//     }
-// }
+pub fn countValids(lambdas: zmath.Vec) u32 {
+    var count: u32 = 0;
+    for (0..4) |i| {
+        if (lambdas[i] != 0.0) count += 1;
+    }
+
+    return count;
+}
+
+pub fn intersect(shape1: Shape, pos1: zmath.Vec, rot1: zmath.Quat, shape2: Shape, pos2: zmath.Vec, rot2: zmath.Quat) bool {
+    const origin: zmath.Vec = .{ 0.0, 0.0, 0.0, 1.0 };
+
+    var num_pts: u32 = 1;
+    var simplex_points: [4]Point = undefined;
+
+    simplex_points[0] = support(shape1, pos1, rot1, shape2, pos2, rot2, .{ 1.0, 1.0, 1.0, 1.0 }, 0.0);
+
+    var closest_dist = std.math.floatMax(f32);
+    var contains_origin = false;
+    var new_dir = simplex_points[0].xyz * @as(zmath.Vec, @splat(-1.0));
+
+    while (true) {
+        const new_pt = support(shape1, pos1, rot1, shape2, pos2, rot2, new_dir, 0.0);
+
+        if (hasPoint(simplex_points, new_pt)) break;
+
+        simplex_points[num_pts] = new_pt;
+        num_pts += 1;
+
+        const dotdot = zmath.dot3(new_dir, new_pt.xyz - origin)[0];
+        if (dotdot < 0.0) break;
+
+        const simplex_result = simplexSignedVolumes(simplex_points[0..num_pts]);
+        var lambdas: zmath.Vec = simplex_result.lambdas;
+        contains_origin = simplex_result.does_intersect;
+        new_dir = simplex_result.new_dir;
+
+        if (contains_origin) break;
+
+        const dist = zmath.lengthSq3(new_dir)[0];
+        if (dist >= closest_dist) break;
+        closest_dist = dist;
+
+        sortValids(&simplex_points, &lambdas);
+        contains_origin = (countValids(lambdas) == 4);
+        if (contains_origin) break;
+    }
+
+    return contains_origin;
+}

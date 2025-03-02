@@ -15,7 +15,7 @@ pub const GameWorld = struct {
     pub const Object = struct {
         model: ?*gx.Model,
         transform: ?[2]zmath.Vec,
-        aabb: ?px.LockedCube,
+        aabb: ?px.BoundingBox,
     };
 
     objects: std.StringHashMap(Object),
@@ -105,7 +105,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     var texture = try gx.Texture.init(&logical_device, &command_pool, "textures/the f word :3.png", null);
     defer texture.deinit();
 
-    var shape = px.LockedCube.cube1x1();
+    var shape = px.BoundingBox.cube1x1();
     shape.max[2] = 4.0;
     shape.min[2] = 0.0;
     const vertices = shape.vertices();
@@ -283,4 +283,14 @@ pub fn main() !void {
 
     // var audio = try AudioLinux.init();
     // defer audio.deinit();
+
+    // const cube = px.LockedCube.cube1x1();
+
+    // const shape1 = px.Shape{ .box = .{ .bounds = cube } };
+
+    // const shape2 = px.Shape{ .sphere = .{ .radius = 1.0 } };
+
+    // if (px.intersect(shape1, .{ 0.0, 0.0, 100.0, 1.0 }, zmath.quatFromAxisAngle(.{ 1.0, 0.0, 0.0, 0.0 }, 0.0), shape2, .{ 0.0, 0.0, 0.0, 1.0 }, zmath.quatFromAxisAngle(.{ 1.0, 0.0, 0.0, 0.0 }, 0.0))) {
+    //     std.debug.print("aaaaaaaa", .{});
+    // }
 }
