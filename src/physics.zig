@@ -1,3 +1,5 @@
+// Copyright 2025-Present Felix Sapora. All rights reserved.
+
 const std = @import("std");
 const zmath = @import("zmath");
 
@@ -139,7 +141,7 @@ pub fn support(shape1: Shape, pos1: zmath.Vec, rot1: zmath.Quat, shape2: Shape, 
 
     const pt1 = shape1.support(norm_dir, pos1, rot1, bias);
 
-    norm_dir = norm_dir * @as(zmath.Vec, @splat(-1.0));
+    norm_dir *= @as(zmath.Vec, @splat(-1.0));
 
     const pt2 = shape2.support(norm_dir, pos2, rot2, bias);
 

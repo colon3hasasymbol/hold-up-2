@@ -1,3 +1,5 @@
+// Copyright 2025-Present Felix Sapora. All rights reserved.
+
 const std = @import("std");
 const zmath = @import("zmath");
 const c = @cImport({
@@ -75,10 +77,10 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     var swapchain = try logical_device.createSwapchain(&surface, window.getExtent(), allocator, null);
     defer swapchain.deinit();
 
-    var command_pool = try logical_device.createCommandPool(physical_device.graphics_queue_family_index, allocator, null);
+    var command_pool = try logical_device.createCommandPool(physical_device.graphics_queue_family_index, null);
     defer command_pool.deinit();
 
-    const command_buffers = try command_pool.allocate(swapchain.color_images.len, allocator);
+    const command_buffers = try command_pool.allocate(@intCast(swapchain.color_images.len), allocator);
     defer allocator.free(command_buffers);
 
     const window_extent = window.getExtent();
@@ -86,9 +88,6 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     const PushConstantData = struct {
         vp: zmath.Mat,
     };
-
-    const pipeline_layout = try vk.Pipeline.createLayout(&logical_device, PushConstantData, null);
-    defer vk.Pipeline.destroyLayout(&logical_device, pipeline_layout, null);
 
     const frag_spv align(@alignOf(u32)) = @embedFile("shaders/simple_shader.frag.spv").*;
     const vert_spv align(@alignOf(u32)) = @embedFile("shaders/simple_shader.vert.spv").*;
@@ -99,23 +98,23 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     var vert_shader = try vk.ShaderModule.init(&logical_device, &vert_spv, null);
     defer vert_shader.deinit();
 
-    var pipeline = try vk.Pipeline.init(&logical_device, pipeline_layout, swapchain.render_pass, &frag_shader, &vert_shader, window_extent, gx.Model.Vertex.getAttributeDescriptions(), gx.Model.Vertex.getBindingDescriptions(), null);
+    var pipeline = try vk.Pipeline.init(&logical_device, PushConstantData, &[_]vk.c.VkDescriptorSetLayoutBinding{}, swapchain.render_pass, &frag_shader, &vert_shader, window_extent, gx.Model.Vertex.getAttributeDescriptions(), gx.Model.Vertex.getBindingDescriptions(), null);
     defer pipeline.deinit();
 
     var texture = try gx.Texture.init(&logical_device, &command_pool, "textures/the f word :3.png", null);
     defer texture.deinit();
 
     var shape = px.BoundingBox.cube1x1();
-    shape.max[2] = 4.0;
-    shape.min[2] = 0.0;
+    // shape.max[2] = 2.0;
+    // shape.min[2] = -2.0;
     const vertices = shape.vertices();
 
     var triangle_model = try gx.Model.init(&logical_device, &vertices, null);
     defer triangle_model.deinit();
 
     try game_world.spawn(.{ .transform = .{ .{ 0.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .aabb = shape }, "segment0");
-    try game_world.spawn(.{ .transform = .{ .{ 0.0, 4.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .aabb = shape }, "segment1");
-    try game_world.spawn(.{ .transform = .{ .{ 0.0, 8.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .aabb = shape }, "segment2");
+    try game_world.spawn(.{ .transform = .{ .{ 2.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .aabb = shape }, "segment1");
+    // try game_world.spawn(.{ .transform = .{ .{ 0.0, 8.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .aabb = shape }, "segment2");
 
     // const start = zmath.Vec{ 0.0, 0.0, 0.0, 0.0 };
     // const end = zmath.Vec{ 8.5, 0.0, 0.0, 0.0 };
@@ -145,6 +144,8 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     var push_constant_data = PushConstantData{
         .vp = zmath.identity(),
     };
+
+    var old_colliding = false;
 
     window.show();
 
@@ -206,7 +207,6 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
                 else => {},
             }
         }
-
         var camera_movement: zmath.F32x4 = .{ 0.0, 0.0, 0.0, 1.0 };
 
         if (keyboard.w) camera_movement[2] -= 0.1;
@@ -248,7 +248,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
                 } else {
                     push_constant_data.vp = world_to_clip;
                 }
-                command_buffer.pushConstants(pipeline_layout, vk.ShaderStage.VERTEX_BIT, &push_constant_data);
+                command_buffer.pushConstants(pipeline.layout, vk.ShaderStage.VERTEX_BIT, &push_constant_data);
                 model.bind(&command_buffer);
                 model.draw(&command_buffer);
             }
@@ -260,9 +260,25 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
         try swapchain.submitCommandBuffers(&command_buffer, image_index);
 
-        // const segment0 = game_world.objects.getPtr("segment0").?;
-        // const segment1 = game_world.objects.getPtr("segment1").?;
-        // const segment2 = game_world.objects.getPtr("segment2").?;
+        const segment0 = game_world.objects.getPtr("segment0").?;
+        const segment1 = game_world.objects.getPtr("segment1").?;
+
+        const pos1 = &segment1.transform.?[0];
+
+        if (keyboard.i) pos1.*[2] -= 0.1;
+        if (keyboard.k) pos1.*[2] += 0.1;
+        if (keyboard.j) pos1.*[0] -= 0.1;
+        if (keyboard.l) pos1.*[0] += 0.1;
+
+        const shape0 = px.Shape{ .sphere = .{ .radius = 0.5 } };
+        const shape1 = px.Shape{ .box = .{ .bounds = segment1.aabb.? } };
+
+        const is_colliding = px.intersect(shape0, segment0.transform.?[0], zmath.quatFromRollPitchYawV(segment0.transform.?[1]), shape1, segment1.transform.?[0], zmath.quatFromRollPitchYawV(segment1.transform.?[1]));
+
+        if (is_colliding and !old_colliding) std.debug.print("is_colliding: true\n", .{});
+        if (!is_colliding and old_colliding) std.debug.print("is_colliding: false\n", .{});
+
+        old_colliding = is_colliding;
     }
 }
 
@@ -284,13 +300,13 @@ pub fn main() !void {
     // var audio = try AudioLinux.init();
     // defer audio.deinit();
 
-    // const cube = px.LockedCube.cube1x1();
+    // const cube = px.BoundingBox.cube1x1();
 
     // const shape1 = px.Shape{ .box = .{ .bounds = cube } };
 
-    // const shape2 = px.Shape{ .sphere = .{ .radius = 1.0 } };
+    // const shape2 = px.Shape{ .box = .{ .bounds = cube } };
 
-    // if (px.intersect(shape1, .{ 0.0, 0.0, 100.0, 1.0 }, zmath.quatFromAxisAngle(.{ 1.0, 0.0, 0.0, 0.0 }, 0.0), shape2, .{ 0.0, 0.0, 0.0, 1.0 }, zmath.quatFromAxisAngle(.{ 1.0, 0.0, 0.0, 0.0 }, 0.0))) {
+    // if (px.intersect(shape1, .{ 0.0, 0.0, 1.5, 1.0 }, zmath.quatFromAxisAngle(.{ 1.0, 0.0, 0.0, 0.0 }, 0.0), shape2, .{ 0.0, 0.0, 0.0, 1.0 }, zmath.quatFromAxisAngle(.{ 1.0, 0.0, 0.0, 0.0 }, 0.0))) {
     //     std.debug.print("aaaaaaaa", .{});
     // }
 }

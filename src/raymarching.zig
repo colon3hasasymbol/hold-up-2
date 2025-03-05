@@ -1,3 +1,5 @@
+// Copyright 2025-Present Felix Sapora. All rights reserved.
+
 const std = @import("std");
 const zmath = @import("zmath");
 const c = @cImport({

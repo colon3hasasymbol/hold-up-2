@@ -1,3 +1,5 @@
+// Copyright 2025-Present Felix Sapora. All rights reserved.
+
 const std = @import("std");
 
 // Although this function looks imperative, note that its job is to

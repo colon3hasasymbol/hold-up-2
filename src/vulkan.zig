@@ -1,3 +1,5 @@
+// Copyright 2025-Present Felix Sapora. All rights reserved.
+
 const std = @import("std");
 pub const c = @cImport({
     @cDefine("VK_NO_PROTOTYPES", {});
@@ -478,6 +480,11 @@ pub const LogicalDevice = struct {
         CmdCopyBufferToImage: std.meta.Child(c.PFN_vkCmdCopyBufferToImage) = undefined,
         CreateSampler: std.meta.Child(c.PFN_vkCreateSampler) = undefined,
         DestroySampler: std.meta.Child(c.PFN_vkDestroySampler) = undefined,
+        CreateDescriptorSetLayout: std.meta.Child(c.PFN_vkCreateDescriptorSetLayout) = undefined,
+        DestroyDescriptorSetLayout: std.meta.Child(c.PFN_vkDestroyDescriptorSetLayout) = undefined,
+        CreateDescriptorPool: std.meta.Child(c.PFN_vkCreateDescriptorPool) = undefined,
+        DestroyDescriptorPool: std.meta.Child(c.PFN_vkDestroyDescriptorPool) = undefined,
+        AllocateDescriptorSets: std.meta.Child(c.PFN_vkAllocateDescriptorSets) = undefined,
     };
 
     handle: c.VkDevice,
@@ -562,8 +569,8 @@ pub const LogicalDevice = struct {
         if (self.dispatch.DeviceWaitIdle(self.handle) < 0) return error.VkDeviceWaitIdle;
     }
 
-    pub fn createCommandPool(self: *const @This(), queue_family_index: u32, allocator: std.mem.Allocator, allocation_callbacks: AllocationCallbacks) !CommandPool {
-        return CommandPool.init(self, queue_family_index, allocator, allocation_callbacks);
+    pub fn createCommandPool(self: *const @This(), queue_family_index: u32, allocation_callbacks: AllocationCallbacks) !CommandPool {
+        return CommandPool.init(self, queue_family_index, allocation_callbacks);
     }
 
     pub fn findSupportedFormat(self: *const @This(), candidates: []const c.VkFormat, tiling: c.VkImageTiling, features: c.VkFormatFeatureFlags) !c.VkFormat {
@@ -722,6 +729,8 @@ pub const Buffer = struct {
     handle: c.VkBuffer,
     memory: c.VkDeviceMemory,
     memory_size: c.VkDeviceSize,
+    mapped: ?*anyopaque,
+    mapped_count: u64,
     device: *const LogicalDevice,
     allocation_callbacks: AllocationCallbacks,
 
@@ -740,6 +749,8 @@ pub const Buffer = struct {
             .handle = handle,
             .memory = null,
             .memory_size = size,
+            .mapped = null,
+            .mapped_count = 0,
             .device = device,
             .allocation_callbacks = allocation_callbacks,
         };
@@ -759,11 +770,31 @@ pub const Buffer = struct {
         if (self.device.dispatch.BindBufferMemory(self.device.handle, self.handle, self.memory, 0) < 0) return error.VkBindBufferMemory;
     }
 
+    pub fn map(self: *@This()) !*anyopaque {
+        if (self.mapped_count == 0) {
+            var result: *anyopaque = undefined;
+            if (self.device.dispatch.MapMemory(self.device.handle, self.memory, 0, self.memory_size, 0, @ptrCast(&result)) < 0) return error.VkMapMemory;
+
+            self.mapped = result;
+            self.mapped_count = 1;
+            return result;
+        }
+
+        self.mapped_count += 1;
+        return self.mapped.?;
+    }
+
+    pub fn unmap(self: *@This()) void {
+        if (self.mapped_count == 0) return;
+        if (self.mapped_count == 1) self.device.dispatch.UnmapMemory(self.device.handle, self.memory);
+
+        self.mapped_count -= 1;
+    }
+
     pub fn uploadData(self: *@This(), data: anytype) !void {
-        var mapped: *anyopaque = undefined;
-        if (self.device.dispatch.MapMemory(self.device.handle, self.memory, 0, self.memory_size, 0, @ptrCast(&mapped)) < 0) return error.VkMapMemory;
+        const mapped = try self.map();
         @memcpy(@as([*]u8, @ptrCast(mapped)), @as([*]u8, @ptrCast(@constCast(data.ptr)))[0 .. data.len * @sizeOf(@TypeOf(data[0]))]);
-        self.device.dispatch.UnmapMemory(self.device.handle, self.memory);
+        self.unmap();
     }
 
     pub fn copy(self: *@This(), dst: *@This(), size: u64, command_pool: *CommandPool) !void {
@@ -1163,10 +1194,9 @@ pub const Swapchain = struct {
 pub const CommandPool = struct {
     handle: c.VkCommandPool,
     allocation_callbacks: AllocationCallbacks,
-    allocator: std.mem.Allocator,
     device: *const LogicalDevice,
 
-    pub fn init(device: *const LogicalDevice, queue_family_index: u32, allocator: std.mem.Allocator, allocation_callbacks: AllocationCallbacks) !@This() {
+    pub fn init(device: *const LogicalDevice, queue_family_index: u32, allocation_callbacks: AllocationCallbacks) !@This() {
         const create_info = std.mem.zeroInit(c.VkCommandPoolCreateInfo, c.VkCommandPoolCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
             .queueFamilyIndex = queue_family_index,
@@ -1179,7 +1209,6 @@ pub const CommandPool = struct {
         return .{
             .handle = handle,
             .allocation_callbacks = allocation_callbacks,
-            .allocator = allocator,
             .device = device,
         };
     }
@@ -1188,10 +1217,10 @@ pub const CommandPool = struct {
         self.device.dispatch.DestroyCommandPool(self.device.handle, self.handle, self.allocation_callbacks);
     }
 
-    pub fn allocate(self: *@This(), count: u64, allocator: std.mem.Allocator) ![]CommandBuffer {
+    pub fn allocate(self: *@This(), count: u32, allocator: std.mem.Allocator) ![]CommandBuffer {
         const allocate_info = std.mem.zeroInit(c.VkCommandBufferAllocateInfo, c.VkCommandBufferAllocateInfo{
             .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-            .commandBufferCount = @intCast(count),
+            .commandBufferCount = count,
             .commandPool = self.handle,
             .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
         });
@@ -1276,6 +1305,53 @@ pub const CommandBuffer = struct {
     }
 };
 
+pub const DescriptorPool = struct {
+    handle: c.VkDescriptorPool,
+    device: *const LogicalDevice,
+    pipeline: *const Pipeline,
+
+    pub fn init(device: *const LogicalDevice, pipeline: *const Pipeline, sizes: []c.VkDescriptorPoolSize, max_sets: u32, allocation_callbacks: AllocationCallbacks) !@This() {
+        const create_info = std.mem.zeroInit(c.VkDescriptorPoolCreateInfo, c.VkDescriptorPoolCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+            .poolSizeCount = @intCast(sizes.len),
+            .pPoolSizes = sizes.ptr,
+            .maxSets = max_sets,
+        });
+
+        var handle: c.VkDescriptorPool = undefined;
+        if (device.dispatch.CreateDescriptorPool(device.handle, &create_info, allocation_callbacks, &handle) < 0) return error.VkCreateDescriptorPool;
+
+        return .{
+            .handle = handle,
+            .device = device,
+            .pipeline = pipeline,
+        };
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.device.dispatch.DestroyDescriptorPool(self.handle);
+    }
+
+    pub fn allocate(self: *@This(), count: u32, allocator: std.mem.Allocator) ![]c.VkDescriptorSet {
+        const layouts = try allocator.alloc(c.VkDescriptorSetLayout, count);
+        defer allocator.free(layouts);
+        @memset(layouts, self.pipeline.descriptor_layout);
+
+        const allocate_info = std.mem.zeroInit(c.VkDescriptorSetAllocateInfo, c.VkDescriptorSetAllocateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+            .descriptorPool = self.handle,
+            .descriptorSetCount = count,
+            .pSetLayouts = layouts.ptr,
+        });
+
+        const handles = try allocator.alloc(c.VkDescriptorSet, count);
+        errdefer allocator.free(handles);
+        if (self.device.dispatch.AllocateDescriptorSets(self.device.handle, &allocate_info, handles.ptr) < 0) return error.VkAllocateDescriptorSet;
+
+        return handles;
+    }
+};
+
 pub const ShaderModule = struct {
     handle: c.VkShaderModule,
     device: *const LogicalDevice,
@@ -1308,9 +1384,37 @@ pub const Pipeline = struct {
     device: *const LogicalDevice,
     frag_shader: *const ShaderModule,
     vert_shader: *const ShaderModule,
+    layout: c.VkPipelineLayout,
+    descriptor_layout: c.VkDescriptorSetLayout,
     allocation_callbacks: AllocationCallbacks,
 
-    pub fn init(device: *const LogicalDevice, pipeline_layout: c.VkPipelineLayout, render_pass: c.VkRenderPass, frag_shader: *const ShaderModule, vert_shader: *const ShaderModule, extent: c.VkExtent2D, attribute_descriptions: []c.VkVertexInputAttributeDescription, binding_descriptions: []c.VkVertexInputBindingDescription, allocation_callbacks: AllocationCallbacks) !@This() {
+    pub fn init(device: *const LogicalDevice, PushConstantData: type, layout_bindings: []c.VkDescriptorSetLayoutBinding, render_pass: c.VkRenderPass, frag_shader: *const ShaderModule, vert_shader: *const ShaderModule, extent: c.VkExtent2D, attribute_descriptions: []c.VkVertexInputAttributeDescription, binding_descriptions: []c.VkVertexInputBindingDescription, allocation_callbacks: AllocationCallbacks) !@This() {
+        const descriptor_layout_create_info = std.mem.zeroInit(c.VkDescriptorSetLayoutCreateInfo, c.VkDescriptorSetLayoutCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            .bindingCount = @intCast(layout_bindings.len),
+            .pBindings = layout_bindings.ptr,
+        });
+
+        var descriptor_layout: c.VkDescriptorSetLayout = undefined;
+        if (device.dispatch.CreateDescriptorSetLayout(device.handle, &descriptor_layout_create_info, allocation_callbacks, &descriptor_layout) < 0) return error.VkCreateDescriptorSetLayout;
+        errdefer device.dispatch.DestroyDescriptorSetLayout(device.handle, descriptor_layout, allocation_callbacks);
+
+        const push_constant_range = std.mem.zeroInit(c.VkPushConstantRange, c.VkPushConstantRange{
+            .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
+            .offset = 0,
+            .size = @sizeOf(PushConstantData),
+        });
+
+        const layout_create_info = std.mem.zeroInit(c.VkPipelineLayoutCreateInfo, c.VkPipelineLayoutCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+            .pushConstantRangeCount = 1,
+            .pPushConstantRanges = &push_constant_range,
+        });
+
+        var layout: c.VkPipelineLayout = undefined;
+        if (device.dispatch.CreatePipelineLayout(device.handle, &layout_create_info, allocation_callbacks, &layout) < 0) return error.VkCreatePipelineLayout;
+        errdefer device.dispatch.DestroyPipelineLayout(device.handle, layout, allocation_callbacks);
+
         const input_assembly_info = std.mem.zeroInit(c.VkPipelineInputAssemblyStateCreateInfo, c.VkPipelineInputAssemblyStateCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
             .topology = c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
@@ -1410,7 +1514,7 @@ pub const Pipeline = struct {
             .pColorBlendState = &color_blend_info,
             .pDepthStencilState = &depth_stencil_info,
             .pDynamicState = null,
-            .layout = pipeline_layout,
+            .layout = layout,
             .renderPass = render_pass,
             .subpass = 0,
             .basePipelineIndex = -1,
@@ -1426,35 +1530,16 @@ pub const Pipeline = struct {
             .device = device,
             .frag_shader = frag_shader,
             .vert_shader = vert_shader,
+            .layout = layout,
+            .descriptor_layout = descriptor_layout,
             .allocation_callbacks = allocation_callbacks,
         };
     }
 
     pub fn deinit(self: *@This()) void {
         self.device.dispatch.DestroyPipeline(self.device.handle, self.handle, self.allocation_callbacks);
-    }
-
-    pub fn createLayout(device: *const LogicalDevice, PushConstantData: type, allocation_callbacks: AllocationCallbacks) !c.VkPipelineLayout {
-        const push_constant_range = std.mem.zeroInit(c.VkPushConstantRange, c.VkPushConstantRange{
-            .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
-            .offset = 0,
-            .size = @sizeOf(PushConstantData),
-        });
-
-        const create_info = std.mem.zeroInit(c.VkPipelineLayoutCreateInfo, c.VkPipelineLayoutCreateInfo{
-            .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-            .pushConstantRangeCount = 1,
-            .pPushConstantRanges = &push_constant_range,
-        });
-
-        var result: c.VkPipelineLayout = undefined;
-        if (device.dispatch.CreatePipelineLayout(device.handle, &create_info, allocation_callbacks, &result) < 0) return error.VkCreatePipelineLayout;
-
-        return result;
-    }
-
-    pub fn destroyLayout(device: *const LogicalDevice, layout: c.VkPipelineLayout, allocation_callbacks: AllocationCallbacks) void {
-        device.dispatch.DestroyPipelineLayout(device.handle, layout, allocation_callbacks);
+        self.device.dispatch.DestroyDescriptorSetLayout(self.device.handle, self.descriptor_layout, self.allocation_callbacks);
+        self.device.dispatch.DestroyPipelineLayout(self.device.handle, self.layout, self.allocation_callbacks);
     }
 
     pub fn bind(self: *@This(), command_buffer: *CommandBuffer) void {
