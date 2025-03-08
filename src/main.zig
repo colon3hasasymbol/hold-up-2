@@ -270,7 +270,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
         if (keyboard.j) pos1.*[0] -= 0.1;
         if (keyboard.l) pos1.*[0] += 0.1;
 
-        const shape0 = px.Shape{ .sphere = .{ .radius = 0.5 } };
+        const shape0 = px.Shape{ .box = .{ .bounds = segment0.aabb.? } };
         const shape1 = px.Shape{ .box = .{ .bounds = segment1.aabb.? } };
 
         const is_colliding = px.intersect(shape0, segment0.transform.?[0], zmath.quatFromRollPitchYawV(segment0.transform.?[1]), shape1, segment1.transform.?[0], zmath.quatFromRollPitchYawV(segment1.transform.?[1]));
