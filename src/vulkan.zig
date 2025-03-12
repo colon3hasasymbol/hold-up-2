@@ -485,6 +485,8 @@ pub const LogicalDevice = struct {
         CreateDescriptorPool: std.meta.Child(c.PFN_vkCreateDescriptorPool) = undefined,
         DestroyDescriptorPool: std.meta.Child(c.PFN_vkDestroyDescriptorPool) = undefined,
         AllocateDescriptorSets: std.meta.Child(c.PFN_vkAllocateDescriptorSets) = undefined,
+        UpdateDescriptorSets: std.meta.Child(c.PFN_vkUpdateDescriptorSets) = undefined,
+        CmdBindDescriptorSets: std.meta.Child(c.PFN_vkCmdBindDescriptorSets) = undefined,
     };
 
     handle: c.VkDevice,
@@ -886,7 +888,7 @@ pub const Swapchain = struct {
             .clipped = c.VK_TRUE,
             .imageUsage = c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
             .compositeAlpha = c.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-            .queueFamilyIndexCount = @as(u32, queue_family_indices.len),
+            .queueFamilyIndexCount = if (queue_family_indices[0] == queue_family_indices[1]) 1 else @as(u32, queue_family_indices.len),
             .pQueueFamilyIndices = &queue_family_indices,
             .imageSharingMode = if (queue_family_indices[0] == queue_family_indices[1]) c.VK_SHARING_MODE_EXCLUSIVE else c.VK_SHARING_MODE_CONCURRENT,
             .imageArrayLayers = 1,
@@ -1167,7 +1169,7 @@ pub const Swapchain = struct {
                 .color = c.VkClearColorValue{ .float32 = .{ clear_color.r, clear_color.g, clear_color.b, clear_color.a } },
             },
             c.VkClearValue{
-                .depthStencil = c.VkClearDepthStencilValue{ .depth = 0.0, .stencil = 0 },
+                .depthStencil = c.VkClearDepthStencilValue{ .depth = 1.0, .stencil = 0 },
             },
         };
 
@@ -1309,6 +1311,7 @@ pub const DescriptorPool = struct {
     handle: c.VkDescriptorPool,
     device: *const LogicalDevice,
     pipeline: *const Pipeline,
+    allocation_callbacks: AllocationCallbacks,
 
     pub fn init(device: *const LogicalDevice, pipeline: *const Pipeline, sizes: []c.VkDescriptorPoolSize, max_sets: u32, allocation_callbacks: AllocationCallbacks) !@This() {
         const create_info = std.mem.zeroInit(c.VkDescriptorPoolCreateInfo, c.VkDescriptorPoolCreateInfo{
@@ -1325,11 +1328,12 @@ pub const DescriptorPool = struct {
             .handle = handle,
             .device = device,
             .pipeline = pipeline,
+            .allocation_callbacks = allocation_callbacks,
         };
     }
 
     pub fn deinit(self: *@This()) void {
-        self.device.dispatch.DestroyDescriptorPool(self.handle);
+        self.device.dispatch.DestroyDescriptorPool(self.device.handle, self.handle, self.allocation_callbacks);
     }
 
     pub fn allocate(self: *@This(), count: u32, allocator: std.mem.Allocator) ![]c.VkDescriptorSet {
@@ -1409,6 +1413,8 @@ pub const Pipeline = struct {
             .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
             .pushConstantRangeCount = 1,
             .pPushConstantRanges = &push_constant_range,
+            .pSetLayouts = &descriptor_layout,
+            .setLayoutCount = 1,
         });
 
         var layout: c.VkPipelineLayout = undefined;
@@ -1474,7 +1480,7 @@ pub const Pipeline = struct {
 
         const depth_stencil_info = std.mem.zeroInit(c.VkPipelineDepthStencilStateCreateInfo, c.VkPipelineDepthStencilStateCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-            .depthTestEnable = c.VK_FALSE,
+            .depthTestEnable = c.VK_TRUE,
             .depthWriteEnable = c.VK_TRUE,
             .depthCompareOp = c.VK_COMPARE_OP_LESS,
             .depthBoundsTestEnable = c.VK_FALSE,

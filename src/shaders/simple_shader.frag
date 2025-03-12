@@ -6,6 +6,8 @@ layout(location = 0) in vec2 frag_uv;
 
 layout(location = 0) out vec4 out_color;
 
+layout(binding = 0) uniform sampler2D u_tex;
+
 void main() {
-    out_color = vec4(frag_uv, 0.0, 1.0);
+    out_color = texture(u_tex, frag_uv);
 }
