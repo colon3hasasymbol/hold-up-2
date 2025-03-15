@@ -105,6 +105,9 @@ pub const ImageViewType = struct {
     pub const TYPE_CUBE_ARRAY: c_int = 6;
 };
 
+pub const Extent2D = struct { x: u32, y: u32 };
+pub const Extent3D = struct { x: u32, y: u32, z: u32 };
+
 pub const Library = struct {
     get_instance_proc_addr: std.meta.Child(c.PFN_vkGetInstanceProcAddr),
 
@@ -185,12 +188,12 @@ pub const Window = struct {
         c.SDL_ShowWindow(self.handle);
     }
 
-    pub fn getExtent(self: *const @This()) c.VkExtent2D {
+    pub fn getExtent(self: *const @This()) Extent2D {
         var width: u32 = 800;
         var height: u32 = 600;
         c.SDL_Vulkan_GetDrawableSize(self.handle, @ptrCast(&width), @ptrCast(&height));
 
-        return c.VkExtent2D{ .width = width, .height = height };
+        return Extent2D{ .x = width, .y = height };
     }
 };
 
@@ -556,7 +559,7 @@ pub const LogicalDevice = struct {
         self.dispatch.DestroyDevice(self.handle, self.allocation_callbacks);
     }
 
-    pub fn createSwapchain(self: *const @This(), surface: *Surface, image_extent: c.VkExtent2D, allocator: std.mem.Allocator, allocation_callbacks: AllocationCallbacks) !Swapchain {
+    pub fn createSwapchain(self: *const @This(), surface: *Surface, image_extent: Extent2D, allocator: std.mem.Allocator, allocation_callbacks: AllocationCallbacks) !Swapchain {
         return Swapchain.init(surface, self, image_extent, allocator, allocation_callbacks);
     }
 
@@ -843,9 +846,9 @@ pub const Swapchain = struct {
     images_in_flight: []c.VkFence,
     current_frame: u32,
     allocator: std.mem.Allocator,
-    extent: c.VkExtent2D,
+    extent: Extent2D,
 
-    pub fn init(surface: *Surface, device: *const LogicalDevice, window_extent: c.VkExtent2D, allocator: std.mem.Allocator, allocation_callbacks: AllocationCallbacks) !@This() {
+    pub fn init(surface: *Surface, device: *const LogicalDevice, window_extent: Extent2D, allocator: std.mem.Allocator, allocation_callbacks: AllocationCallbacks) !@This() {
         var swapchain_support = try device.physical_device.getSwapchainSupport(surface, allocator);
         defer swapchain_support.deinit();
 
@@ -869,7 +872,7 @@ pub const Swapchain = struct {
         if (swapchain_support.capabilities.currentExtent.width != std.math.maxInt(u32)) {
             extent = swapchain_support.capabilities.currentExtent;
         } else {
-            var actual_extent: c.VkExtent2D = window_extent;
+            var actual_extent: c.VkExtent2D = .{ .width = window_extent.x, .height = window_extent.y };
             actual_extent.width = @max(swapchain_support.capabilities.minImageExtent.width, @min(swapchain_support.capabilities.maxImageExtent.width, actual_extent.width));
             actual_extent.height = @max(swapchain_support.capabilities.minImageExtent.height, @min(swapchain_support.capabilities.maxImageExtent.height, actual_extent.height));
 
@@ -1179,7 +1182,7 @@ pub const Swapchain = struct {
             .framebuffer = self.frame_buffers[image_index],
             .renderArea = c.VkRect2D{
                 .offset = c.VkOffset2D{ .x = 0, .y = 0 },
-                .extent = self.extent,
+                .extent = .{ .width = self.extent.x, .height = self.extent.y },
             },
             .clearValueCount = @intCast(clear_values.len),
             .pClearValues = &clear_values,
@@ -1392,7 +1395,7 @@ pub const Pipeline = struct {
     descriptor_layout: c.VkDescriptorSetLayout,
     allocation_callbacks: AllocationCallbacks,
 
-    pub fn init(device: *const LogicalDevice, PushConstantData: type, layout_bindings: []c.VkDescriptorSetLayoutBinding, render_pass: c.VkRenderPass, frag_shader: *const ShaderModule, vert_shader: *const ShaderModule, extent: c.VkExtent2D, attribute_descriptions: []c.VkVertexInputAttributeDescription, binding_descriptions: []c.VkVertexInputBindingDescription, allocation_callbacks: AllocationCallbacks) !@This() {
+    pub fn init(device: *const LogicalDevice, PushConstantData: type, layout_bindings: []c.VkDescriptorSetLayoutBinding, render_pass: c.VkRenderPass, frag_shader: *const ShaderModule, vert_shader: *const ShaderModule, extent: Extent2D, attribute_descriptions: []c.VkVertexInputAttributeDescription, binding_descriptions: []c.VkVertexInputBindingDescription, allocation_callbacks: AllocationCallbacks) !@This() {
         const descriptor_layout_create_info = std.mem.zeroInit(c.VkDescriptorSetLayoutCreateInfo, c.VkDescriptorSetLayoutCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
             .bindingCount = @intCast(layout_bindings.len),
@@ -1430,15 +1433,15 @@ pub const Pipeline = struct {
         const viewport = std.mem.zeroInit(c.VkViewport, c.VkViewport{
             .x = 0.0,
             .y = 0.0,
-            .width = @floatFromInt(extent.width),
-            .height = @floatFromInt(extent.height),
+            .width = @floatFromInt(extent.x),
+            .height = @floatFromInt(extent.y),
             .minDepth = 0.0,
             .maxDepth = 1.0,
         });
 
         const scissor = std.mem.zeroInit(c.VkRect2D, c.VkRect2D{
             .offset = std.mem.zeroes(c.VkOffset2D),
-            .extent = .{ .width = extent.width, .height = extent.height },
+            .extent = .{ .width = extent.x, .height = extent.y },
         });
 
         const viewport_info = std.mem.zeroInit(c.VkPipelineViewportStateCreateInfo, c.VkPipelineViewportStateCreateInfo{
