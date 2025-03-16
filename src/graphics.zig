@@ -79,8 +79,10 @@ pub const Model = struct {
 pub const Texture = struct {
     image: vk.Image,
     sampler: vk.Sampler,
+    descriptor_sets: []vk.c.VkDescriptorSet,
+    allocator: std.mem.Allocator,
 
-    pub fn init(device: *const vk.LogicalDevice, command_pool: *vk.CommandPool, file_path: []const u8, allocation_callbacks: vk.AllocationCallbacks) !@This() {
+    pub fn init(device: *const vk.LogicalDevice, command_pool: *vk.CommandPool, descriptor_pool: *vk.DescriptorPool, descriptor_count: u32, file_path: []const u8, allocator: std.mem.Allocator, allocation_callbacks: vk.AllocationCallbacks) !@This() {
         var texture_width: c_int = undefined;
         var texture_height: c_int = undefined;
         var texture_channels: c_int = undefined;
@@ -115,16 +117,42 @@ pub const Texture = struct {
         try image.uploadData(pixels[0..size], command_pool);
         try image.createView(vk.ImageViewType.TYPE_2D, vk.c.VK_FORMAT_R8G8B8A8_SRGB, .{ .aspectMask = vk.c.VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1 });
 
-        const sampler = try vk.Sampler.init(device, allocation_callbacks);
+        var sampler = try vk.Sampler.init(device, allocation_callbacks);
+        errdefer sampler.deinit();
+
+        const descriptor_sets = try descriptor_pool.allocate(descriptor_count, allocator);
+
+        for (0..descriptor_count) |i| {
+            const image_info = std.mem.zeroInit(vk.c.VkDescriptorImageInfo, vk.c.VkDescriptorImageInfo{
+                .imageLayout = vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .sampler = sampler.handle,
+                .imageView = image.view,
+            });
+
+            const descriptor_write = std.mem.zeroInit(vk.c.VkWriteDescriptorSet, vk.c.VkWriteDescriptorSet{
+                .sType = vk.c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .dstSet = descriptor_sets[i],
+                .dstBinding = 0,
+                .dstArrayElement = 0,
+                .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .descriptorCount = 1,
+                .pImageInfo = &image_info,
+            });
+
+            device.dispatch.UpdateDescriptorSets(device.handle, 1, &descriptor_write, 0, null);
+        }
 
         return .{
             .image = image,
             .sampler = sampler,
+            .descriptor_sets = descriptor_sets,
+            .allocator = allocator,
         };
     }
 
     pub fn deinit(self: *@This()) void {
         self.image.deinit();
         self.sampler.deinit();
+        self.allocator.free(self.descriptor_sets);
     }
 };

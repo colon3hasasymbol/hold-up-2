@@ -16,6 +16,7 @@ const AudioLinux = @import("audio_linux.zig");
 pub const GameWorld = struct {
     pub const Object = struct {
         model: ?*gx.Model,
+        texture: ?*gx.Texture,
         transform: ?[2]zmath.Vec,
         aabb: ?px.BoundingBox,
     };
@@ -101,34 +102,14 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     var pipeline = try vk.Pipeline.init(&logical_device, PushConstantData, @constCast(&[_]vk.c.VkDescriptorSetLayoutBinding{std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 0, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT })}), swapchain.render_pass, &frag_shader, &vert_shader, window_extent, gx.Model.Vertex.getAttributeDescriptions(), gx.Model.Vertex.getBindingDescriptions(), null);
     defer pipeline.deinit();
 
-    var texture = try gx.Texture.init(&logical_device, &command_pool, "textures/the f word :3.png", null);
-    defer texture.deinit();
-
-    var descriptor_pool = try vk.DescriptorPool.init(&logical_device, &pipeline, @constCast(&[_]vk.c.VkDescriptorPoolSize{.{ .type = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = @intCast(swapchain.color_images.len) }}), @intCast(swapchain.color_images.len), null);
+    var descriptor_pool = try vk.DescriptorPool.init(&logical_device, &pipeline, @constCast(&[_]vk.c.VkDescriptorPoolSize{.{ .type = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = @intCast(swapchain.color_images.len * 2) }}), @intCast(swapchain.color_images.len * 2), null);
     defer descriptor_pool.deinit();
 
-    const descriptor_sets = try descriptor_pool.allocate(@intCast(swapchain.color_images.len), allocator);
-    defer allocator.free(descriptor_sets);
+    var texture1 = try gx.Texture.init(&logical_device, &command_pool, &descriptor_pool, @intCast(swapchain.color_images.len), "textures/the f word :3.png", allocator, null);
+    defer texture1.deinit();
 
-    for (0..swapchain.color_images.len) |i| {
-        const image_info = std.mem.zeroInit(vk.c.VkDescriptorImageInfo, vk.c.VkDescriptorImageInfo{
-            .imageLayout = vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            .sampler = texture.sampler.handle,
-            .imageView = texture.image.view,
-        });
-
-        const descriptor_write = std.mem.zeroInit(vk.c.VkWriteDescriptorSet, vk.c.VkWriteDescriptorSet{
-            .sType = vk.c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = descriptor_sets[i],
-            .dstBinding = 0,
-            .dstArrayElement = 0,
-            .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-            .descriptorCount = 1,
-            .pImageInfo = &image_info,
-        });
-
-        logical_device.dispatch.UpdateDescriptorSets(logical_device.handle, 1, &descriptor_write, 0, null);
-    }
+    var texture2 = try gx.Texture.init(&logical_device, &command_pool, &descriptor_pool, @intCast(swapchain.color_images.len), "textures/map.png", allocator, null);
+    defer texture2.deinit();
 
     var shape = px.BoundingBox.cube1x1();
     // shape.max[2] = 2.0;
@@ -138,8 +119,8 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     var triangle_model = try gx.Model.init(&logical_device, &vertices, null);
     defer triangle_model.deinit();
 
-    try game_world.spawn(.{ .transform = .{ .{ 0.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .aabb = shape }, "segment0");
-    try game_world.spawn(.{ .transform = .{ .{ 2.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .aabb = shape }, "segment1");
+    try game_world.spawn(.{ .transform = .{ .{ 0.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .texture = &texture1, .aabb = shape }, "segment0");
+    try game_world.spawn(.{ .transform = .{ .{ 2.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .texture = &texture2, .aabb = shape }, "segment1");
     // try game_world.spawn(.{ .transform = .{ .{ 0.0, 8.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .aabb = shape }, "segment2");
 
     // const start = zmath.Vec{ 0.0, 0.0, 0.0, 0.0 };
@@ -265,8 +246,6 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
         pipeline.bind(&command_buffer);
 
-        logical_device.dispatch.CmdBindDescriptorSets(command_buffer.handle, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.layout, 0, 1, &descriptor_sets[image_index], 0, null);
-
         var object_iterator = game_world.objects.iterator();
         while (object_iterator.next()) |*object| {
             if (object.value_ptr.model) |model| {
@@ -275,6 +254,9 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
                     push_constant_data.vp = zmath.mul(object_to_world, world_to_clip);
                 } else {
                     push_constant_data.vp = world_to_clip;
+                }
+                if (object.value_ptr.texture) |texture| {
+                    logical_device.dispatch.CmdBindDescriptorSets(command_buffer.handle, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.layout, 0, 1, &texture.descriptor_sets[image_index], 0, null);
                 }
                 command_buffer.pushConstants(pipeline.layout, vk.ShaderStage.VERTEX_BIT, &push_constant_data);
                 model.bind(&command_buffer);
