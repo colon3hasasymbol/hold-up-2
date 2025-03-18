@@ -17,6 +17,7 @@ pub const GameWorld = struct {
     pub const Object = struct {
         model: ?*gx.Model,
         texture: ?*gx.Texture,
+        pipeline: ?*vk.Pipeline,
         transform: ?[2]zmath.Vec,
         aabb: ?px.BoundingBox,
     };
@@ -99,10 +100,13 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     var vert_shader = try vk.ShaderModule.init(&logical_device, &vert_spv, null);
     defer vert_shader.deinit();
 
-    var pipeline = try vk.Pipeline.init(&logical_device, PushConstantData, @constCast(&[_]vk.c.VkDescriptorSetLayoutBinding{std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 0, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT })}), swapchain.render_pass, &frag_shader, &vert_shader, window_extent, gx.Model.Vertex.getAttributeDescriptions(), gx.Model.Vertex.getBindingDescriptions(), null);
-    defer pipeline.deinit();
+    var pipeline1 = try vk.Pipeline.init(&logical_device, PushConstantData, @constCast(&[_]vk.c.VkDescriptorSetLayoutBinding{std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 0, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT })}), swapchain.render_pass, vk.c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, vk.c.VK_POLYGON_MODE_FILL, &frag_shader, &vert_shader, window_extent, gx.Model.Vertex.getAttributeDescriptions(), gx.Model.Vertex.getBindingDescriptions(), null);
+    defer pipeline1.deinit();
 
-    var descriptor_pool = try vk.DescriptorPool.init(&logical_device, &pipeline, @constCast(&[_]vk.c.VkDescriptorPoolSize{.{ .type = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = @intCast(swapchain.color_images.len * 2) }}), @intCast(swapchain.color_images.len * 2), null);
+    var pipeline2 = try vk.Pipeline.init(&logical_device, PushConstantData, @constCast(&[_]vk.c.VkDescriptorSetLayoutBinding{std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 0, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT })}), swapchain.render_pass, vk.c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, vk.c.VK_POLYGON_MODE_LINE, &frag_shader, &vert_shader, window_extent, gx.Model.Vertex.getAttributeDescriptions(), gx.Model.Vertex.getBindingDescriptions(), null);
+    defer pipeline2.deinit();
+
+    var descriptor_pool = try vk.DescriptorPool.init(&logical_device, &pipeline1, @constCast(&[_]vk.c.VkDescriptorPoolSize{.{ .type = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = @intCast(swapchain.color_images.len * 2) }}), @intCast(swapchain.color_images.len * 2), null);
     defer descriptor_pool.deinit();
 
     var texture1 = try gx.Texture.init(&logical_device, &command_pool, &descriptor_pool, @intCast(swapchain.color_images.len), "textures/the f word :3.png", allocator, null);
@@ -119,8 +123,8 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     var triangle_model = try gx.Model.init(&logical_device, &vertices, null);
     defer triangle_model.deinit();
 
-    try game_world.spawn(.{ .transform = .{ .{ 0.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .texture = &texture1, .aabb = shape }, "segment0");
-    try game_world.spawn(.{ .transform = .{ .{ 2.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .texture = &texture2, .aabb = shape }, "segment1");
+    try game_world.spawn(.{ .transform = .{ .{ 0.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .texture = &texture1, .pipeline = &pipeline1, .aabb = shape }, "segment0");
+    try game_world.spawn(.{ .transform = .{ .{ 2.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .texture = &texture2, .pipeline = &pipeline2, .aabb = shape }, "segment1");
     // try game_world.spawn(.{ .transform = .{ .{ 0.0, 8.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .aabb = shape }, "segment2");
 
     // const start = zmath.Vec{ 0.0, 0.0, 0.0, 0.0 };
@@ -216,19 +220,19 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
         }
         var camera_movement: zmath.F32x4 = .{ 0.0, 0.0, 0.0, 1.0 };
 
-        if (keyboard.w) camera_movement[2] -= 0.1;
-        if (keyboard.s) camera_movement[2] += 0.1;
-        if (keyboard.d) camera_movement[0] += 0.1;
-        if (keyboard.a) camera_movement[0] -= 0.1;
-        if (keyboard.lshift) camera_movement[1] += 0.1;
-        if (keyboard.space) camera_movement[1] -= 0.1;
+        if (keyboard.w) camera_movement[2] -= 0.01;
+        if (keyboard.s) camera_movement[2] += 0.01;
+        if (keyboard.d) camera_movement[0] += 0.01;
+        if (keyboard.a) camera_movement[0] -= 0.01;
+        if (keyboard.lshift) camera_movement[1] += 0.01;
+        if (keyboard.space) camera_movement[1] -= 0.01;
 
         camera_position += camera_movement;
 
-        if (keyboard.up) camera_rotation[0] += 0.01;
-        if (keyboard.down) camera_rotation[0] -= 0.01;
-        if (keyboard.right) camera_rotation[1] += 0.01;
-        if (keyboard.left) camera_rotation[1] -= 0.01;
+        if (keyboard.up) camera_rotation[0] += 0.001;
+        if (keyboard.down) camera_rotation[0] -= 0.001;
+        if (keyboard.right) camera_rotation[1] += 0.001;
+        if (keyboard.left) camera_rotation[1] -= 0.001;
 
         var world_to_view = zmath.inverse(zmath.translation(camera_position[0], camera_position[1], camera_position[2]));
         world_to_view = zmath.mul(world_to_view, zmath.mul(zmath.rotationY(camera_rotation[1]), zmath.rotationX(camera_rotation[0])));
@@ -244,23 +248,24 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
         swapchain.beginRenderPass(&command_buffer, image_index, .{ .r = 0.0, .g = 0.4, .b = 0.6, .a = 1.0 });
 
-        pipeline.bind(&command_buffer);
-
         var object_iterator = game_world.objects.iterator();
         while (object_iterator.next()) |*object| {
             if (object.value_ptr.model) |model| {
-                if (object.value_ptr.transform) |transform| {
-                    const object_to_world = zmath.mul(zmath.matFromRollPitchYaw(transform[1][0], transform[1][1], transform[1][2]), zmath.translation(transform[0][0], transform[0][1], transform[0][2]));
-                    push_constant_data.vp = zmath.mul(object_to_world, world_to_clip);
-                } else {
-                    push_constant_data.vp = world_to_clip;
+                if (object.value_ptr.pipeline) |pipeline| {
+                    if (object.value_ptr.transform) |transform| {
+                        const object_to_world = zmath.mul(zmath.matFromRollPitchYaw(transform[1][0], transform[1][1], transform[1][2]), zmath.translation(transform[0][0], transform[0][1], transform[0][2]));
+                        push_constant_data.vp = zmath.mul(object_to_world, world_to_clip);
+                    } else {
+                        push_constant_data.vp = world_to_clip;
+                    }
+                    if (object.value_ptr.texture) |texture| {
+                        logical_device.dispatch.CmdBindDescriptorSets(command_buffer.handle, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.layout, 0, 1, &texture.descriptor_sets[image_index], 0, null);
+                    }
+                    pipeline.bind(&command_buffer);
+                    command_buffer.pushConstants(pipeline.layout, vk.ShaderStage.VERTEX_BIT, &push_constant_data);
+                    model.bind(&command_buffer);
+                    model.draw(&command_buffer);
                 }
-                if (object.value_ptr.texture) |texture| {
-                    logical_device.dispatch.CmdBindDescriptorSets(command_buffer.handle, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.layout, 0, 1, &texture.descriptor_sets[image_index], 0, null);
-                }
-                command_buffer.pushConstants(pipeline.layout, vk.ShaderStage.VERTEX_BIT, &push_constant_data);
-                model.bind(&command_buffer);
-                model.draw(&command_buffer);
             }
         }
 
@@ -275,10 +280,10 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
         const pos1 = &segment1.transform.?[0];
 
-        if (keyboard.i) pos1.*[2] -= 0.1;
-        if (keyboard.k) pos1.*[2] += 0.1;
-        if (keyboard.j) pos1.*[0] -= 0.1;
-        if (keyboard.l) pos1.*[0] += 0.1;
+        if (keyboard.i) pos1.*[2] -= 0.01;
+        if (keyboard.k) pos1.*[2] += 0.01;
+        if (keyboard.j) pos1.*[0] -= 0.01;
+        if (keyboard.l) pos1.*[0] += 0.01;
 
         const shape0 = px.Shape{ .box = .{ .bounds = segment0.aabb.? } };
         const shape1 = px.Shape{ .box = .{ .bounds = segment1.aabb.? } };

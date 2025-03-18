@@ -523,6 +523,7 @@ pub const LogicalDevice = struct {
 
         const enabled_features = std.mem.zeroInit(c.VkPhysicalDeviceFeatures, c.VkPhysicalDeviceFeatures{
             .samplerAnisotropy = c.VK_TRUE,
+            .fillModeNonSolid = c.VK_TRUE,
         });
 
         const create_info = std.mem.zeroInit(c.VkDeviceCreateInfo, c.VkDeviceCreateInfo{
@@ -681,12 +682,10 @@ pub const Image = struct {
         try staging_buffer.createMemory(MemoryProperty.HOST_VISIBLE_BIT | MemoryProperty.HOST_COHERENT_BIT);
         try staging_buffer.uploadData(data);
 
-        try self.transitionLayout(c.VK_IMAGE_LAYOUT_UNDEFINED, c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, command_pool);
         try staging_buffer.copyToImage(self, self.extent.width, self.extent.height, self.extent.depth, command_pool);
-        try self.transitionLayout(c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, command_pool);
     }
 
-    pub fn transitionLayout(self: *@This(), old_layout: c.VkImageLayout, new_layout: c.VkImageLayout, command_pool: *CommandPool) !void {
+    pub fn transitionLayout(self: *@This(), old_layout: c.VkImageLayout, new_layout: c.VkImageLayout, src_access_mask: c.VkAccessFlags, dst_access_mask: c.VkAccessFlags, src_stage: c.VkPipelineStageFlags, dst_stage: c.VkPipelineStageFlags, command_pool: *CommandPool) !void {
         var command_buffer = try command_pool.beginSingleTimeCommands();
 
         var barrier = std.mem.zeroInit(c.VkImageMemoryBarrier, c.VkImageMemoryBarrier{
@@ -696,6 +695,8 @@ pub const Image = struct {
             .srcQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
             .image = self.handle,
+            .srcAccessMask = src_access_mask,
+            .dstAccessMask = dst_access_mask,
             .subresourceRange = c.VkImageSubresourceRange{
                 .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
                 .baseMipLevel = 0,
@@ -704,25 +705,6 @@ pub const Image = struct {
                 .layerCount = 1,
             },
         });
-
-        var src_stage: u32 = undefined;
-        var dst_stage: u32 = undefined;
-
-        if (old_layout == c.VK_IMAGE_LAYOUT_UNDEFINED and new_layout == c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-            barrier.srcAccessMask = 0;
-            barrier.dstAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT;
-
-            src_stage = c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-            dst_stage = c.VK_PIPELINE_STAGE_TRANSFER_BIT;
-        } else if (old_layout == c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL and new_layout == c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
-            barrier.srcAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT;
-            barrier.dstAccessMask = c.VK_ACCESS_SHADER_READ_BIT;
-
-            src_stage = c.VK_PIPELINE_STAGE_TRANSFER_BIT;
-            dst_stage = c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-        } else {
-            return error.UnsupportedLayoutTransition;
-        }
 
         self.device.dispatch.CmdPipelineBarrier(command_buffer.handle, src_stage, dst_stage, 0, 0, null, 0, null, 1, &barrier);
 
@@ -1395,7 +1377,7 @@ pub const Pipeline = struct {
     descriptor_layout: c.VkDescriptorSetLayout,
     allocation_callbacks: AllocationCallbacks,
 
-    pub fn init(device: *const LogicalDevice, PushConstantData: type, layout_bindings: []c.VkDescriptorSetLayoutBinding, render_pass: c.VkRenderPass, frag_shader: *const ShaderModule, vert_shader: *const ShaderModule, extent: Extent2D, attribute_descriptions: []c.VkVertexInputAttributeDescription, binding_descriptions: []c.VkVertexInputBindingDescription, allocation_callbacks: AllocationCallbacks) !@This() {
+    pub fn init(device: *const LogicalDevice, PushConstantData: type, layout_bindings: []c.VkDescriptorSetLayoutBinding, render_pass: c.VkRenderPass, primitive_topology: c.VkPrimitiveTopology, polygon_mode: c.VkPolygonMode, frag_shader: *const ShaderModule, vert_shader: *const ShaderModule, extent: Extent2D, attribute_descriptions: []c.VkVertexInputAttributeDescription, binding_descriptions: []c.VkVertexInputBindingDescription, allocation_callbacks: AllocationCallbacks) !@This() {
         const descriptor_layout_create_info = std.mem.zeroInit(c.VkDescriptorSetLayoutCreateInfo, c.VkDescriptorSetLayoutCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
             .bindingCount = @intCast(layout_bindings.len),
@@ -1426,7 +1408,7 @@ pub const Pipeline = struct {
 
         const input_assembly_info = std.mem.zeroInit(c.VkPipelineInputAssemblyStateCreateInfo, c.VkPipelineInputAssemblyStateCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-            .topology = c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+            .topology = primitive_topology,
             .primitiveRestartEnable = c.VK_FALSE,
         });
 
@@ -1456,7 +1438,7 @@ pub const Pipeline = struct {
             .sType = c.VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
             .depthClampEnable = c.VK_FALSE,
             .rasterizerDiscardEnable = c.VK_FALSE,
-            .polygonMode = c.VK_POLYGON_MODE_FILL,
+            .polygonMode = polygon_mode,
             .lineWidth = 1.0,
             .cullMode = c.VK_CULL_MODE_NONE,
             .frontFace = c.VK_FRONT_FACE_CLOCKWISE,

@@ -10,4 +10,5 @@ layout(binding = 0) uniform sampler2D u_tex;
 
 void main() {
     out_color = texture(u_tex, frag_uv);
+    // out_color = vec4(gl_FragCoord.zzz, 1.0);
 }

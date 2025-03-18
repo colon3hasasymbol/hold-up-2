@@ -97,6 +97,16 @@ pub const BoundingBox = struct {
     }
 };
 
+// pub fn tetrahedronVertices(point_a: zmath.Vec, point_b: zmath.Vec, point_c: zmath.Vec, point_d: zmath.Vec) [12]gx.Model.Vertex {
+//     const tri_uvs = [_]@Vector(2, f32){
+//         .{ 0.0, 0.0 },
+//         .{ 1.0, 1.0 },
+//         .{ 0.0, 1.0 },
+//     };
+
+//     return [_]gx.Model.Vertex{gx.Model.Vertex{ .position = .{point_a[0].point_a[0]} }};
+// }
+
 pub const ShapeType = enum { box, sphere };
 
 pub const Shape = union(ShapeType) {
