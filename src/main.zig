@@ -150,6 +150,58 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     if (logical_device.dispatch.CreateRenderPass(logical_device.handle, &render_pass_create_info, null, &render_pass) < 0) return error.VkCreateRenderPass;
     defer logical_device.dispatch.DestroyRenderPass(logical_device.handle, render_pass, null);
 
+    const attachments = [_]vk.c.VkImageView{
+        offscreen_albedo.view,
+        offscreen_positions.view,
+        offscreen_normals.view,
+        offscreen_depth.view,
+    };
+
+    const framebuffer_create_info = vk.c.VkFramebufferCreateInfo{
+        .sType = vk.c.VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = render_pass,
+        .pAttachments = &attachments,
+        .attachmentCount = @intCast(attachments.len),
+        .width = window_extent.x,
+        .height = window_extent.y,
+        .layers = 1,
+    };
+
+    var framebuffer: vk.c.VkFramebuffer = undefined;
+    if (logical_device.dispatch.CreateFramebuffer(logical_device.handle, &framebuffer_create_info, null, &framebuffer) < 0) return error.VkCreateFramebuffer;
+    defer logical_device.dispatch.DestroyFramebuffer(logical_device.handle, framebuffer, null);
+
+    const color_sampler_create_info = vk.c.VkSamplerCreateInfo{
+        .sType = vk.c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .magFilter = vk.c.VK_FILTER_NEAREST,
+        .minFilter = vk.c.VK_FILTER_NEAREST,
+        .mipmapMode = vk.c.VK_SAMPLER_MIPMAP_MODE_LINEAR,
+        .addressModeU = vk.c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeV = vk.c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeW = vk.c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .mipLodBias = 0.0,
+        .maxAnisotropy = 1.0,
+        .minLod = 0.0,
+        .maxLod = 0.0,
+        .borderColor = vk.c.VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
+    };
+
+    var color_sampler: vk.c.VkSampler = undefined;
+    if (logical_device.dispatch.CreateSampler(logical_device.handle, &color_sampler_create_info, null, &color_sampler) < 0) return error.VkCreateSampler;
+    defer logical_device.dispatch.DestroySampler(logical_device.handle, color_sampler, null);
+
+    const semaphore_create_info = vk.c.VkSemaphoreCreateInfo{ .sType = vk.c.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+
+    var semaphore: vk.c.VkSemaphore = undefined;
+    if (logical_device.dispatch.CreateSemaphore(logical_device.handle, &semaphore_create_info, null, &semaphore) < 0) return error.VkCreateSemaphore;
+    defer logical_device.dispatch.DestroySemaphore(logical_device.handle, semaphore, null);
+
+    const offscreen_command_buffers = try command_pool.allocate(1, allocator);
+    const offscreen_command_buffer = offscreen_command_buffers[0];
+    allocator.free(offscreen_command_buffers);
+
+    _ = offscreen_command_buffer;
+
     const PushConstantData = struct {
         vp: zmath.Mat,
     };
@@ -274,6 +326,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
                         c.SDLK_j => keyboard.j = true,
                         c.SDLK_k => keyboard.k = true,
                         c.SDLK_l => keyboard.l = true,
+                        c.SDLK_ESCAPE => return,
 
                         else => {},
                     }
