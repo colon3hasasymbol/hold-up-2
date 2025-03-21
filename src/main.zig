@@ -51,7 +51,8 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     defer game_world.deinit();
 
     if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) {
-        c.SDL_LogError(c.SDL_LOG_CATEGORY_APPLICATION, "%s", c.SDL_GetError());
+        const err = c.SDL_GetError();
+        c.SDL_LogError(c.SDL_LOG_CATEGORY_APPLICATION, "%s", err);
         return error.SDLInitVideo;
     }
     defer c.SDL_Quit();
@@ -85,7 +86,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     const command_buffers = try command_pool.allocate(@intCast(swapchain.color_images.len), allocator);
     defer allocator.free(command_buffers);
 
-    var descriptor_pool = try vk.DescriptorPool.init(&logical_device, @constCast(&[_]vk.c.VkDescriptorPoolSize{.{ .type = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = (2 * 2) + (3 * swapchain.color_images.len) }}), @intCast(swapchain.color_images.len * 2), null);
+    var descriptor_pool = try vk.DescriptorPool.init(&logical_device, @constCast(&[_]vk.c.VkDescriptorPoolSize{.{ .type = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = @intCast((2 * 2) + (3 * swapchain.color_images.len)) }}), @intCast((2 * 2) + (3 * swapchain.color_images.len)), null);
     defer descriptor_pool.deinit();
 
     const window_extent = window.getExtent();
@@ -203,6 +204,10 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     if (logical_device.dispatch.CreateSemaphore(logical_device.handle, &semaphore_create_info, null, &render_semaphore) < 0) return error.VkCreateSemaphore;
     defer logical_device.dispatch.DestroySemaphore(logical_device.handle, render_semaphore, null);
 
+    var offscreen_semaphore: vk.c.VkSemaphore = undefined;
+    if (logical_device.dispatch.CreateSemaphore(logical_device.handle, &semaphore_create_info, null, &offscreen_semaphore) < 0) return error.VkCreateSemaphore;
+    defer logical_device.dispatch.DestroySemaphore(logical_device.handle, offscreen_semaphore, null);
+
     const offscreen_command_buffers = try command_pool.allocate(1, allocator);
     const offscreen_command_buffer = offscreen_command_buffers[0];
     allocator.free(offscreen_command_buffers);
@@ -226,10 +231,19 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     var pipeline2 = try vk.Pipeline.init(&logical_device, PushConstantData, @constCast(&[_]vk.c.VkDescriptorSetLayoutBinding{std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 0, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT })}), swapchain.render_pass, vk.c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, vk.c.VK_POLYGON_MODE_LINE, &frag_shader, &vert_shader, window_extent, gx.Model.Vertex.getAttributeDescriptions(), gx.Model.Vertex.getBindingDescriptions(), null);
     defer pipeline2.deinit();
 
-    var lighting_pipeline = try vk.Pipeline.init(&logical_device, PushConstantData, @constCast(&[_]vk.c.VkDescriptorSetLayoutBinding{std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 0, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT })}), swapchain.render_pass, vk.c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, vk.c.VK_POLYGON_MODE_FILL, &frag_shader, &vert_shader, window_extent, gx.Model.Vertex.getAttributeDescriptions(), gx.Model.Vertex.getBindingDescriptions(), null);
+    const lighting_frag_spv align(@alignOf(u32)) = @embedFile("shaders/lighting_shader.frag.spv").*;
+    const lighting_vert_spv align(@alignOf(u32)) = @embedFile("shaders/lighting_shader.vert.spv").*;
+
+    var lighting_frag_shader = try vk.ShaderModule.init(&logical_device, &lighting_frag_spv, null);
+    defer lighting_frag_shader.deinit();
+
+    var lighting_vert_shader = try vk.ShaderModule.init(&logical_device, &lighting_vert_spv, null);
+    defer lighting_vert_shader.deinit();
+
+    var lighting_pipeline = try vk.Pipeline.init(&logical_device, PushConstantData, @constCast(&[_]vk.c.VkDescriptorSetLayoutBinding{std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 0, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT })}), swapchain.render_pass, vk.c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, vk.c.VK_POLYGON_MODE_FILL, &lighting_frag_shader, &lighting_vert_shader, window_extent, &[_]vk.c.VkVertexInputAttributeDescription{}, &[_]vk.c.VkVertexInputBindingDescription{}, null);
     defer lighting_pipeline.deinit();
 
-    const offsceen_descriptors = try descriptor_pool.allocate(lighting_pipeline, 3 * swapchain.color_images.len, allocator);
+    const offsceen_descriptors = try descriptor_pool.allocate(&lighting_pipeline, @intCast(3 * swapchain.color_images.len), allocator);
     defer allocator.free(offsceen_descriptors);
 
     for (0..swapchain.color_images.len) |i| {
@@ -293,13 +307,13 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     for (command_buffers, 0..) |*command_buffer, i| {
         try command_buffer.begin();
 
-        swapchain.beginRenderPass(&command_buffer, i, .{ .r = 0.0, .g = 0.4, .b = 0.6, .a = 1.0 });
+        swapchain.beginRenderPass(command_buffer, @intCast(i), .{ .r = 0.0, .g = 0.4, .b = 0.6, .a = 1.0 });
 
-        lighting_pipeline.bind(&command_buffer);
+        lighting_pipeline.bind(command_buffer);
 
         logical_device.dispatch.CmdBindDescriptorSets(command_buffer.handle, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, lighting_pipeline.layout, 0, @intCast(offsceen_descriptors.len), offsceen_descriptors.ptr, 0, null);
 
-        swapchain.endRenderPass(&command_buffer);
+        swapchain.endRenderPass(command_buffer);
 
         try command_buffer.end();
     }
@@ -437,6 +451,9 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
         const world_to_clip = zmath.mul(world_to_view, view_to_clip);
 
+        var image_index: u32 = undefined;
+        if (logical_device.dispatch.AcquireNextImageKHR(logical_device.handle, swapchain.handle, std.math.maxInt(u64), present_semaphore, @ptrCast(vk.c.VK_NULL_HANDLE), &image_index) < 0) return error.VkAcquireNextImage;
+
         // const image_index = try swapchain.acquireNextImage();
         var command_buffer = offscreen_command_buffer;
 
@@ -502,7 +519,39 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
         try command_buffer.end();
 
-        // try swapchain.submitCommandBuffers(&command_buffer, image_index);
+        const wait_stage = vk.c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+        var submit_info = vk.c.VkSubmitInfo{
+            .sType = vk.c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &present_semaphore,
+            .signalSemaphoreCount = 1,
+            .pSignalSemaphores = &offscreen_semaphore,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &command_buffer.handle,
+            .pWaitDstStageMask = @ptrCast(&wait_stage),
+        };
+
+        if (logical_device.dispatch.QueueSubmit(logical_device.graphics_queue, 1, &submit_info, null) < 0) return error.VkQueueSubmit;
+
+        submit_info.pCommandBuffers = &command_buffers[image_index].handle;
+        submit_info.pWaitSemaphores = &offscreen_semaphore;
+        submit_info.pSignalSemaphores = &render_semaphore;
+
+        if (logical_device.dispatch.QueueSubmit(logical_device.graphics_queue, 1, &submit_info, null) < 0) return error.VkQueueSubmit;
+
+        const present_info = std.mem.zeroInit(vk.c.VkPresentInfoKHR, vk.c.VkPresentInfoKHR{
+            .sType = vk.c.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &render_semaphore,
+            .swapchainCount = 1,
+            .pSwapchains = &swapchain.handle,
+            .pImageIndices = &image_index,
+        });
+
+        if (logical_device.dispatch.QueuePresentKHR(logical_device.present_queue, &present_info) < 0) return error.VkQueuePresent;
+
+        if (logical_device.dispatch.QueueWaitIdle(logical_device.graphics_queue) < 0) return error.VkQueueWaitIdle;
 
         const segment0 = game_world.objects.getPtr("segment0").?;
         const segment1 = game_world.objects.getPtr("segment1").?;
@@ -539,7 +588,13 @@ pub fn main() !void {
         try dir.setAsCwd();
     }
 
-    try conventional(allocator);
+    conventional(allocator) catch |e| {
+        var file = try std.fs.cwd().createFile("log.txt", .{});
+        defer file.close();
+        const writer = file.writer();
+        try writer.print("{}\n", .{e});
+        return e;
+    };
 
     // var audio = try AudioLinux.init();
     // defer audio.deinit();

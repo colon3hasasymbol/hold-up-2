@@ -20,7 +20,7 @@ layout(push_constant) uniform Push {
 void main() {
     frag_uv = uv;
 
-    vec3 world_pos = push.model * vec4(position, 1.0);
+    vec3 world_pos = (push.model * vec4(position, 1.0)).xyz;
 
     frag_pos = world_pos;
 
