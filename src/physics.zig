@@ -42,6 +42,24 @@ pub const BoundingBox = struct {
             .{ 1.0, 1.0 },
         };
 
+        const normals = [_]@Vector(3, f16){
+            .{ -1.0, 0.0, 0.0 },
+            .{ 1.0, 0.0, 0.0 },
+            .{ 0.0, -1.0, 0.0 },
+            .{ 0.0, 1.0, 0.0 },
+            .{ 0.0, 0.0, 1.0 },
+            .{ 0.0, 0.0, -1.0 },
+        };
+
+        const tangents = [_]@Vector(3, f16){
+            .{ 0.0, 1.0, 0.0 },
+            .{ 0.0, 1.0, 0.0 },
+            .{ 0.0, 1.0, 0.0 },
+            .{ 0.0, 1.0, 0.0 },
+            .{ 0.0, 1.0, 0.0 },
+            .{ 0.0, 1.0, 0.0 },
+        };
+
         // const quad_uvs = [_]@Vector(2, f32){
         //     .{ 1.0, 0.0 },
         //     .{ 0.0, 1.0 },
@@ -52,47 +70,47 @@ pub const BoundingBox = struct {
         // };
 
         return [_]gx.Model.Vertex{
-            gx.Model.Vertex{ .position = .{ self.min[0], self.min[1], self.min[2] }, .uv = quad_uvs[0] },
-            gx.Model.Vertex{ .position = .{ self.min[0], self.max[1], self.max[2] }, .uv = quad_uvs[1] },
-            gx.Model.Vertex{ .position = .{ self.min[0], self.min[1], self.max[2] }, .uv = quad_uvs[2] },
-            gx.Model.Vertex{ .position = .{ self.min[0], self.min[1], self.min[2] }, .uv = quad_uvs[3] },
-            gx.Model.Vertex{ .position = .{ self.min[0], self.max[1], self.min[2] }, .uv = quad_uvs[4] },
-            gx.Model.Vertex{ .position = .{ self.min[0], self.max[1], self.max[2] }, .uv = quad_uvs[5] },
+            gx.Model.Vertex{ .position = .{ self.min[0], self.min[1], self.min[2] }, .uv = quad_uvs[0], .normal = normals[0], .tangent = tangents[0] },
+            gx.Model.Vertex{ .position = .{ self.min[0], self.max[1], self.max[2] }, .uv = quad_uvs[1], .normal = normals[0], .tangent = tangents[0] },
+            gx.Model.Vertex{ .position = .{ self.min[0], self.min[1], self.max[2] }, .uv = quad_uvs[2], .normal = normals[0], .tangent = tangents[0] },
+            gx.Model.Vertex{ .position = .{ self.min[0], self.min[1], self.min[2] }, .uv = quad_uvs[3], .normal = normals[0], .tangent = tangents[0] },
+            gx.Model.Vertex{ .position = .{ self.min[0], self.max[1], self.min[2] }, .uv = quad_uvs[4], .normal = normals[0], .tangent = tangents[0] },
+            gx.Model.Vertex{ .position = .{ self.min[0], self.max[1], self.max[2] }, .uv = quad_uvs[5], .normal = normals[0], .tangent = tangents[0] },
 
-            gx.Model.Vertex{ .position = .{ self.max[0], self.min[1], self.min[2] }, .uv = quad_uvs[0] },
-            gx.Model.Vertex{ .position = .{ self.max[0], self.max[1], self.max[2] }, .uv = quad_uvs[1] },
-            gx.Model.Vertex{ .position = .{ self.max[0], self.min[1], self.max[2] }, .uv = quad_uvs[2] },
-            gx.Model.Vertex{ .position = .{ self.max[0], self.min[1], self.min[2] }, .uv = quad_uvs[3] },
-            gx.Model.Vertex{ .position = .{ self.max[0], self.max[1], self.min[2] }, .uv = quad_uvs[4] },
-            gx.Model.Vertex{ .position = .{ self.max[0], self.max[1], self.max[2] }, .uv = quad_uvs[5] },
+            gx.Model.Vertex{ .position = .{ self.max[0], self.min[1], self.min[2] }, .uv = quad_uvs[0], .normal = normals[1], .tangent = tangents[1] },
+            gx.Model.Vertex{ .position = .{ self.max[0], self.max[1], self.max[2] }, .uv = quad_uvs[1], .normal = normals[1], .tangent = tangents[1] },
+            gx.Model.Vertex{ .position = .{ self.max[0], self.min[1], self.max[2] }, .uv = quad_uvs[2], .normal = normals[1], .tangent = tangents[1] },
+            gx.Model.Vertex{ .position = .{ self.max[0], self.min[1], self.min[2] }, .uv = quad_uvs[3], .normal = normals[1], .tangent = tangents[1] },
+            gx.Model.Vertex{ .position = .{ self.max[0], self.max[1], self.min[2] }, .uv = quad_uvs[4], .normal = normals[1], .tangent = tangents[1] },
+            gx.Model.Vertex{ .position = .{ self.max[0], self.max[1], self.max[2] }, .uv = quad_uvs[5], .normal = normals[1], .tangent = tangents[1] },
 
-            gx.Model.Vertex{ .position = .{ self.min[0], self.min[1], self.min[2] }, .uv = quad_uvs[0] },
-            gx.Model.Vertex{ .position = .{ self.max[0], self.min[1], self.max[2] }, .uv = quad_uvs[1] },
-            gx.Model.Vertex{ .position = .{ self.min[0], self.min[1], self.max[2] }, .uv = quad_uvs[2] },
-            gx.Model.Vertex{ .position = .{ self.min[0], self.min[1], self.min[2] }, .uv = quad_uvs[3] },
-            gx.Model.Vertex{ .position = .{ self.max[0], self.min[1], self.min[2] }, .uv = quad_uvs[4] },
-            gx.Model.Vertex{ .position = .{ self.max[0], self.min[1], self.max[2] }, .uv = quad_uvs[5] },
+            gx.Model.Vertex{ .position = .{ self.min[0], self.min[1], self.min[2] }, .uv = quad_uvs[0], .normal = normals[2], .tangent = tangents[2] },
+            gx.Model.Vertex{ .position = .{ self.max[0], self.min[1], self.max[2] }, .uv = quad_uvs[1], .normal = normals[2], .tangent = tangents[2] },
+            gx.Model.Vertex{ .position = .{ self.min[0], self.min[1], self.max[2] }, .uv = quad_uvs[2], .normal = normals[2], .tangent = tangents[2] },
+            gx.Model.Vertex{ .position = .{ self.min[0], self.min[1], self.min[2] }, .uv = quad_uvs[3], .normal = normals[2], .tangent = tangents[2] },
+            gx.Model.Vertex{ .position = .{ self.max[0], self.min[1], self.min[2] }, .uv = quad_uvs[4], .normal = normals[2], .tangent = tangents[2] },
+            gx.Model.Vertex{ .position = .{ self.max[0], self.min[1], self.max[2] }, .uv = quad_uvs[5], .normal = normals[2], .tangent = tangents[2] },
 
-            gx.Model.Vertex{ .position = .{ self.min[0], self.max[1], self.min[2] }, .uv = quad_uvs[0] },
-            gx.Model.Vertex{ .position = .{ self.max[0], self.max[1], self.max[2] }, .uv = quad_uvs[1] },
-            gx.Model.Vertex{ .position = .{ self.min[0], self.max[1], self.max[2] }, .uv = quad_uvs[2] },
-            gx.Model.Vertex{ .position = .{ self.min[0], self.max[1], self.min[2] }, .uv = quad_uvs[3] },
-            gx.Model.Vertex{ .position = .{ self.max[0], self.max[1], self.min[2] }, .uv = quad_uvs[4] },
-            gx.Model.Vertex{ .position = .{ self.max[0], self.max[1], self.max[2] }, .uv = quad_uvs[5] },
+            gx.Model.Vertex{ .position = .{ self.min[0], self.max[1], self.min[2] }, .uv = quad_uvs[0], .normal = normals[3], .tangent = tangents[3] },
+            gx.Model.Vertex{ .position = .{ self.max[0], self.max[1], self.max[2] }, .uv = quad_uvs[1], .normal = normals[3], .tangent = tangents[3] },
+            gx.Model.Vertex{ .position = .{ self.min[0], self.max[1], self.max[2] }, .uv = quad_uvs[2], .normal = normals[3], .tangent = tangents[3] },
+            gx.Model.Vertex{ .position = .{ self.min[0], self.max[1], self.min[2] }, .uv = quad_uvs[3], .normal = normals[3], .tangent = tangents[3] },
+            gx.Model.Vertex{ .position = .{ self.max[0], self.max[1], self.min[2] }, .uv = quad_uvs[4], .normal = normals[3], .tangent = tangents[3] },
+            gx.Model.Vertex{ .position = .{ self.max[0], self.max[1], self.max[2] }, .uv = quad_uvs[5], .normal = normals[3], .tangent = tangents[3] },
 
-            gx.Model.Vertex{ .position = .{ self.min[0], self.min[1], self.max[2] }, .uv = quad_uvs[0] },
-            gx.Model.Vertex{ .position = .{ self.max[0], self.max[1], self.max[2] }, .uv = quad_uvs[1] },
-            gx.Model.Vertex{ .position = .{ self.min[0], self.max[1], self.max[2] }, .uv = quad_uvs[2] },
-            gx.Model.Vertex{ .position = .{ self.min[0], self.min[1], self.max[2] }, .uv = quad_uvs[3] },
-            gx.Model.Vertex{ .position = .{ self.max[0], self.min[1], self.max[2] }, .uv = quad_uvs[4] },
-            gx.Model.Vertex{ .position = .{ self.max[0], self.max[1], self.max[2] }, .uv = quad_uvs[5] },
+            gx.Model.Vertex{ .position = .{ self.min[0], self.min[1], self.max[2] }, .uv = quad_uvs[0], .normal = normals[4], .tangent = tangents[4] },
+            gx.Model.Vertex{ .position = .{ self.max[0], self.max[1], self.max[2] }, .uv = quad_uvs[1], .normal = normals[4], .tangent = tangents[4] },
+            gx.Model.Vertex{ .position = .{ self.min[0], self.max[1], self.max[2] }, .uv = quad_uvs[2], .normal = normals[4], .tangent = tangents[4] },
+            gx.Model.Vertex{ .position = .{ self.min[0], self.min[1], self.max[2] }, .uv = quad_uvs[3], .normal = normals[4], .tangent = tangents[4] },
+            gx.Model.Vertex{ .position = .{ self.max[0], self.min[1], self.max[2] }, .uv = quad_uvs[4], .normal = normals[4], .tangent = tangents[4] },
+            gx.Model.Vertex{ .position = .{ self.max[0], self.max[1], self.max[2] }, .uv = quad_uvs[5], .normal = normals[4], .tangent = tangents[4] },
 
-            gx.Model.Vertex{ .position = .{ self.min[0], self.min[1], self.min[2] }, .uv = quad_uvs[0] },
-            gx.Model.Vertex{ .position = .{ self.max[0], self.max[1], self.min[2] }, .uv = quad_uvs[1] },
-            gx.Model.Vertex{ .position = .{ self.min[0], self.max[1], self.min[2] }, .uv = quad_uvs[2] },
-            gx.Model.Vertex{ .position = .{ self.min[0], self.min[1], self.min[2] }, .uv = quad_uvs[3] },
-            gx.Model.Vertex{ .position = .{ self.max[0], self.min[1], self.min[2] }, .uv = quad_uvs[4] },
-            gx.Model.Vertex{ .position = .{ self.max[0], self.max[1], self.min[2] }, .uv = quad_uvs[5] },
+            gx.Model.Vertex{ .position = .{ self.min[0], self.min[1], self.min[2] }, .uv = quad_uvs[0], .normal = normals[5], .tangent = tangents[5] },
+            gx.Model.Vertex{ .position = .{ self.max[0], self.max[1], self.min[2] }, .uv = quad_uvs[1], .normal = normals[5], .tangent = tangents[5] },
+            gx.Model.Vertex{ .position = .{ self.min[0], self.max[1], self.min[2] }, .uv = quad_uvs[2], .normal = normals[5], .tangent = tangents[5] },
+            gx.Model.Vertex{ .position = .{ self.min[0], self.min[1], self.min[2] }, .uv = quad_uvs[3], .normal = normals[5], .tangent = tangents[5] },
+            gx.Model.Vertex{ .position = .{ self.max[0], self.min[1], self.min[2] }, .uv = quad_uvs[4], .normal = normals[5], .tangent = tangents[5] },
+            gx.Model.Vertex{ .position = .{ self.max[0], self.max[1], self.min[2] }, .uv = quad_uvs[5], .normal = normals[5], .tangent = tangents[5] },
         };
     }
 };

@@ -85,6 +85,9 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     const command_buffers = try command_pool.allocate(@intCast(swapchain.color_images.len), allocator);
     defer allocator.free(command_buffers);
 
+    var descriptor_pool = try vk.DescriptorPool.init(&logical_device, @constCast(&[_]vk.c.VkDescriptorPoolSize{.{ .type = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = (2 * 2) + (3 * swapchain.color_images.len) }}), @intCast(swapchain.color_images.len * 2), null);
+    defer descriptor_pool.deinit();
+
     const window_extent = window.getExtent();
 
     var offscreen_albedo = try vk.Image.init(&logical_device, .{ .sType = vk.c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = vk.c.VK_IMAGE_TYPE_2D, .format = vk.c.VK_FORMAT_R8G8B8A8_UNORM, .extent = .{ .width = window_extent.x, .height = window_extent.y, .depth = 1 }, .mipLevels = 1, .arrayLayers = 1, .samples = vk.c.VK_SAMPLE_COUNT_1_BIT, .tiling = vk.c.VK_IMAGE_TILING_OPTIMAL, .usage = vk.c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | vk.c.VK_IMAGE_USAGE_SAMPLED_BIT }, null);
@@ -192,15 +195,17 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
     const semaphore_create_info = vk.c.VkSemaphoreCreateInfo{ .sType = vk.c.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
 
-    var semaphore: vk.c.VkSemaphore = undefined;
-    if (logical_device.dispatch.CreateSemaphore(logical_device.handle, &semaphore_create_info, null, &semaphore) < 0) return error.VkCreateSemaphore;
-    defer logical_device.dispatch.DestroySemaphore(logical_device.handle, semaphore, null);
+    var present_semaphore: vk.c.VkSemaphore = undefined;
+    if (logical_device.dispatch.CreateSemaphore(logical_device.handle, &semaphore_create_info, null, &present_semaphore) < 0) return error.VkCreateSemaphore;
+    defer logical_device.dispatch.DestroySemaphore(logical_device.handle, present_semaphore, null);
+
+    var render_semaphore: vk.c.VkSemaphore = undefined;
+    if (logical_device.dispatch.CreateSemaphore(logical_device.handle, &semaphore_create_info, null, &render_semaphore) < 0) return error.VkCreateSemaphore;
+    defer logical_device.dispatch.DestroySemaphore(logical_device.handle, render_semaphore, null);
 
     const offscreen_command_buffers = try command_pool.allocate(1, allocator);
     const offscreen_command_buffer = offscreen_command_buffers[0];
     allocator.free(offscreen_command_buffers);
-
-    _ = offscreen_command_buffer;
 
     const PushConstantData = struct {
         vp: zmath.Mat,
@@ -221,13 +226,88 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     var pipeline2 = try vk.Pipeline.init(&logical_device, PushConstantData, @constCast(&[_]vk.c.VkDescriptorSetLayoutBinding{std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 0, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT })}), swapchain.render_pass, vk.c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, vk.c.VK_POLYGON_MODE_LINE, &frag_shader, &vert_shader, window_extent, gx.Model.Vertex.getAttributeDescriptions(), gx.Model.Vertex.getBindingDescriptions(), null);
     defer pipeline2.deinit();
 
-    var descriptor_pool = try vk.DescriptorPool.init(&logical_device, &pipeline1, @constCast(&[_]vk.c.VkDescriptorPoolSize{.{ .type = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = @intCast(swapchain.color_images.len * 2) }}), @intCast(swapchain.color_images.len * 2), null);
-    defer descriptor_pool.deinit();
+    var lighting_pipeline = try vk.Pipeline.init(&logical_device, PushConstantData, @constCast(&[_]vk.c.VkDescriptorSetLayoutBinding{std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 0, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT })}), swapchain.render_pass, vk.c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, vk.c.VK_POLYGON_MODE_FILL, &frag_shader, &vert_shader, window_extent, gx.Model.Vertex.getAttributeDescriptions(), gx.Model.Vertex.getBindingDescriptions(), null);
+    defer lighting_pipeline.deinit();
 
-    var texture1 = try gx.Texture.init(&logical_device, &command_pool, &descriptor_pool, @intCast(swapchain.color_images.len), "textures/the f word :3.png", allocator, null);
+    const offsceen_descriptors = try descriptor_pool.allocate(lighting_pipeline, 3 * swapchain.color_images.len, allocator);
+    defer allocator.free(offsceen_descriptors);
+
+    for (0..swapchain.color_images.len) |i| {
+        const color_image_info = vk.c.VkDescriptorImageInfo{
+            .imageLayout = vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            .imageView = offscreen_albedo.view,
+            .sampler = color_sampler,
+        };
+
+        const color_descriptor_write = vk.c.VkWriteDescriptorSet{
+            .sType = vk.c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = offsceen_descriptors[i],
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .descriptorCount = 1,
+            .pImageInfo = &color_image_info,
+        };
+
+        const position_image_info = vk.c.VkDescriptorImageInfo{
+            .imageLayout = vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            .imageView = offscreen_albedo.view,
+            .sampler = color_sampler,
+        };
+
+        const position_descriptor_write = vk.c.VkWriteDescriptorSet{
+            .sType = vk.c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = offsceen_descriptors[i + 1],
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .descriptorCount = 1,
+            .pImageInfo = &position_image_info,
+        };
+
+        const normal_image_info = vk.c.VkDescriptorImageInfo{
+            .imageLayout = vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            .imageView = offscreen_albedo.view,
+            .sampler = color_sampler,
+        };
+
+        const normal_descriptor_write = vk.c.VkWriteDescriptorSet{
+            .sType = vk.c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = offsceen_descriptors[i + 2],
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .descriptorCount = 1,
+            .pImageInfo = &normal_image_info,
+        };
+
+        const descriptor_writes = [_]vk.c.VkWriteDescriptorSet{
+            color_descriptor_write,
+            position_descriptor_write,
+            normal_descriptor_write,
+        };
+
+        logical_device.dispatch.UpdateDescriptorSets(logical_device.handle, @intCast(descriptor_writes.len), &descriptor_writes, 0, null);
+    }
+
+    for (command_buffers, 0..) |*command_buffer, i| {
+        try command_buffer.begin();
+
+        swapchain.beginRenderPass(&command_buffer, i, .{ .r = 0.0, .g = 0.4, .b = 0.6, .a = 1.0 });
+
+        lighting_pipeline.bind(&command_buffer);
+
+        logical_device.dispatch.CmdBindDescriptorSets(command_buffer.handle, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, lighting_pipeline.layout, 0, @intCast(offsceen_descriptors.len), offsceen_descriptors.ptr, 0, null);
+
+        swapchain.endRenderPass(&command_buffer);
+
+        try command_buffer.end();
+    }
+
+    var texture1 = try gx.Texture.init(&logical_device, &command_pool, &pipeline1, &descriptor_pool, 1, "textures/the f word :3.png", allocator, null);
     defer texture1.deinit();
 
-    var texture2 = try gx.Texture.init(&logical_device, &command_pool, &descriptor_pool, @intCast(swapchain.color_images.len), "textures/map.png", allocator, null);
+    var texture2 = try gx.Texture.init(&logical_device, &command_pool, &pipeline1, &descriptor_pool, 1, "textures/map.png", allocator, null);
     defer texture2.deinit();
 
     var shape = px.BoundingBox.cube1x1();
@@ -357,12 +437,43 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
         const world_to_clip = zmath.mul(world_to_view, view_to_clip);
 
-        const image_index = try swapchain.acquireNextImage();
-        var command_buffer = command_buffers[image_index];
+        // const image_index = try swapchain.acquireNextImage();
+        var command_buffer = offscreen_command_buffer;
 
         try command_buffer.begin();
 
-        swapchain.beginRenderPass(&command_buffer, image_index, .{ .r = 0.0, .g = 0.4, .b = 0.6, .a = 1.0 });
+        // swapchain.beginRenderPass(&command_buffer, image_index, .{ .r = 0.0, .g = 0.4, .b = 0.6, .a = 1.0 });
+
+        const clear_values = [_]vk.c.VkClearValue{
+            .{ .color = .{ .float32 = .{ 0.0, 0.0, 0.0, 0.0 } } },
+            .{ .color = .{ .float32 = .{ 0.0, 0.0, 0.0, 0.0 } } },
+            .{ .color = .{ .float32 = .{ 0.0, 0.0, 0.0, 0.0 } } },
+            .{ .depthStencil = .{ .depth = 1.0, .stencil = 0 } },
+        };
+
+        const render_pass_begin_info = vk.c.VkRenderPassBeginInfo{
+            .sType = vk.c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .renderPass = render_pass,
+            .framebuffer = framebuffer,
+            .renderArea = .{ .extent = .{ .width = window_extent.x, .height = window_extent.y } },
+            .clearValueCount = @intCast(clear_values.len),
+            .pClearValues = &clear_values,
+        };
+
+        logical_device.dispatch.CmdBeginRenderPass(command_buffer.handle, &render_pass_begin_info, vk.c.VK_SUBPASS_CONTENTS_INLINE);
+
+        const viewport = vk.c.VkViewport{
+            .width = @floatFromInt(window_extent.x),
+            .height = @floatFromInt(window_extent.y),
+            .minDepth = 0.0,
+            .maxDepth = 1.0,
+        };
+
+        logical_device.dispatch.CmdSetViewport(command_buffer.handle, 0, 1, &viewport);
+
+        const scissor = vk.c.VkRect2D{ .extent = .{ .width = window_extent.x, .height = window_extent.y } };
+
+        logical_device.dispatch.CmdSetScissor(command_buffer.handle, 0, 1, &scissor);
 
         var object_iterator = game_world.objects.iterator();
         while (object_iterator.next()) |*object| {
@@ -375,7 +486,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
                         push_constant_data.vp = world_to_clip;
                     }
                     if (object.value_ptr.texture) |texture| {
-                        logical_device.dispatch.CmdBindDescriptorSets(command_buffer.handle, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.layout, 0, 1, &texture.descriptor_sets[image_index], 0, null);
+                        logical_device.dispatch.CmdBindDescriptorSets(command_buffer.handle, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.layout, 0, 1, &texture.descriptor_sets[0], 0, null);
                     }
                     pipeline.bind(&command_buffer);
                     command_buffer.pushConstants(pipeline.layout, vk.ShaderStage.VERTEX_BIT, &push_constant_data);
@@ -385,11 +496,13 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
             }
         }
 
-        swapchain.endRenderPass(&command_buffer);
+        // swapchain.endRenderPass(&command_buffer);
+
+        logical_device.dispatch.CmdEndRenderPass(command_buffer.handle);
 
         try command_buffer.end();
 
-        try swapchain.submitCommandBuffers(&command_buffer, image_index);
+        // try swapchain.submitCommandBuffers(&command_buffer, image_index);
 
         const segment0 = game_world.objects.getPtr("segment0").?;
         const segment1 = game_world.objects.getPtr("segment1").?;

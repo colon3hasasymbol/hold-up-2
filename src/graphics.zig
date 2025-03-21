@@ -12,6 +12,8 @@ pub const Model = struct {
     pub const Vertex = struct {
         position: @Vector(3, f32),
         uv: @Vector(2, f32),
+        normal: @Vector(3, f16),
+        tangent: @Vector(3, f16),
 
         pub fn getBindingDescriptions() []vk.VertexBinding {
             return @constCast(&[_]vk.VertexBinding{
@@ -36,6 +38,18 @@ pub const Model = struct {
                     .format = 103,
                     .location = 1,
                     .offset = @offsetOf(@This(), "uv"),
+                },
+                vk.VertexAttribute{
+                    .binding = 0,
+                    .format = vk.c.VK_FORMAT_R16G16B16_UNORM,
+                    .location = 2,
+                    .offset = @offsetOf(@This(), "normal"),
+                },
+                vk.VertexAttribute{
+                    .binding = 0,
+                    .format = vk.c.VK_FORMAT_R16G16B16_UNORM,
+                    .location = 3,
+                    .offset = @offsetOf(@This(), "tangent"),
                 },
             });
         }
@@ -77,12 +91,13 @@ pub const Model = struct {
 };
 
 pub const Texture = struct {
-    image: vk.Image,
+    color_image: vk.Image,
+    normal_image: vk.Image,
     sampler: vk.Sampler,
     descriptor_sets: []vk.c.VkDescriptorSet,
     allocator: std.mem.Allocator,
 
-    pub fn init(device: *const vk.LogicalDevice, command_pool: *vk.CommandPool, descriptor_pool: *vk.DescriptorPool, descriptor_count: u32, file_path: []const u8, allocator: std.mem.Allocator, allocation_callbacks: vk.AllocationCallbacks) !@This() {
+    pub fn init(device: *const vk.LogicalDevice, command_pool: *vk.CommandPool, pipeline: *vk.Pipeline, descriptor_pool: *vk.DescriptorPool, descriptor_count: u32, file_path: []const u8, allocator: std.mem.Allocator, allocation_callbacks: vk.AllocationCallbacks) !@This() {
         var texture_width: c_int = undefined;
         var texture_height: c_int = undefined;
         var texture_channels: c_int = undefined;
@@ -92,7 +107,7 @@ pub const Texture = struct {
         defer stbi.stbi_image_free(pixels);
         const size: u64 = @as(u64, @intCast(texture_width)) * @as(u64, @intCast(texture_height)) * 4;
 
-        const image_create_info = std.mem.zeroInit(vk.c.VkImageCreateInfo, vk.c.VkImageCreateInfo{
+        var image_create_info = std.mem.zeroInit(vk.c.VkImageCreateInfo, vk.c.VkImageCreateInfo{
             .sType = vk.c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
             .imageType = vk.c.VK_IMAGE_TYPE_2D,
             .extent = .{
@@ -111,41 +126,73 @@ pub const Texture = struct {
             .flags = 0,
         });
 
-        var image = try vk.Image.init(device, image_create_info, allocation_callbacks);
-        errdefer image.deinit();
-        try image.createMemory(vk.c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-        try image.transitionLayout(vk.c.VK_IMAGE_LAYOUT_UNDEFINED, vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, vk.c.VK_ACCESS_TRANSFER_WRITE_BIT, vk.c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT, command_pool);
-        try image.uploadData(pixels[0..size], command_pool);
-        try image.transitionLayout(vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, vk.c.VK_ACCESS_TRANSFER_WRITE_BIT, vk.c.VK_ACCESS_SHADER_READ_BIT, vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT, vk.c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, command_pool);
-        try image.createView(vk.ImageViewType.TYPE_2D, vk.c.VK_FORMAT_R8G8B8A8_SRGB, .{ .aspectMask = vk.c.VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1 });
+        var color_image = try vk.Image.init(device, image_create_info, allocation_callbacks);
+        errdefer color_image.deinit();
+        try color_image.createMemory(vk.c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        try color_image.transitionLayout(vk.c.VK_IMAGE_LAYOUT_UNDEFINED, vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, vk.c.VK_ACCESS_TRANSFER_WRITE_BIT, vk.c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT, command_pool);
+        try color_image.uploadData(pixels[0..size], command_pool);
+        try color_image.transitionLayout(vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, vk.c.VK_ACCESS_TRANSFER_WRITE_BIT, vk.c.VK_ACCESS_SHADER_READ_BIT, vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT, vk.c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, command_pool);
+        try color_image.createView(vk.ImageViewType.TYPE_2D, image_create_info.format, .{ .aspectMask = vk.c.VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1 });
+
+        image_create_info.format = vk.c.VK_FORMAT_R16G16B16A16_UNORM;
+
+        var normal_image = try vk.Image.init(device, image_create_info, allocation_callbacks);
+        errdefer normal_image.deinit();
+        try normal_image.createMemory(vk.c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        try normal_image.transitionLayout(vk.c.VK_IMAGE_LAYOUT_UNDEFINED, vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, vk.c.VK_ACCESS_TRANSFER_WRITE_BIT, vk.c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT, command_pool);
+        try normal_image.uploadData(pixels[0..size], command_pool);
+        try normal_image.transitionLayout(vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, vk.c.VK_ACCESS_TRANSFER_WRITE_BIT, vk.c.VK_ACCESS_SHADER_READ_BIT, vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT, vk.c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, command_pool);
+        try normal_image.createView(vk.ImageViewType.TYPE_2D, image_create_info.format, .{ .aspectMask = vk.c.VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1 });
 
         var sampler = try vk.Sampler.init(device, allocation_callbacks);
         errdefer sampler.deinit();
 
-        const descriptor_sets = try descriptor_pool.allocate(descriptor_count, allocator);
+        const descriptor_sets = try descriptor_pool.allocate(pipeline, descriptor_count * 2, allocator);
 
         for (0..descriptor_count) |i| {
-            const image_info = std.mem.zeroInit(vk.c.VkDescriptorImageInfo, vk.c.VkDescriptorImageInfo{
+            const color_image_info = std.mem.zeroInit(vk.c.VkDescriptorImageInfo, vk.c.VkDescriptorImageInfo{
                 .imageLayout = vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 .sampler = sampler.handle,
-                .imageView = image.view,
+                .imageView = color_image.view,
             });
 
-            const descriptor_write = std.mem.zeroInit(vk.c.VkWriteDescriptorSet, vk.c.VkWriteDescriptorSet{
+            const color_descriptor_write = std.mem.zeroInit(vk.c.VkWriteDescriptorSet, vk.c.VkWriteDescriptorSet{
                 .sType = vk.c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .dstSet = descriptor_sets[i],
                 .dstBinding = 0,
                 .dstArrayElement = 0,
                 .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                 .descriptorCount = 1,
-                .pImageInfo = &image_info,
+                .pImageInfo = &color_image_info,
             });
 
-            device.dispatch.UpdateDescriptorSets(device.handle, 1, &descriptor_write, 0, null);
+            const normal_image_info = std.mem.zeroInit(vk.c.VkDescriptorImageInfo, vk.c.VkDescriptorImageInfo{
+                .imageLayout = vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .sampler = sampler.handle,
+                .imageView = normal_image.view,
+            });
+
+            const normal_descriptor_write = std.mem.zeroInit(vk.c.VkWriteDescriptorSet, vk.c.VkWriteDescriptorSet{
+                .sType = vk.c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .dstSet = descriptor_sets[i + descriptor_count],
+                .dstBinding = 1,
+                .dstArrayElement = 0,
+                .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .descriptorCount = 1,
+                .pImageInfo = &normal_image_info,
+            });
+
+            const descriptor_writes = [_]vk.c.VkWriteDescriptorSet{
+                color_descriptor_write,
+                normal_descriptor_write,
+            };
+
+            device.dispatch.UpdateDescriptorSets(device.handle, @intCast(descriptor_writes.len), &descriptor_writes, 0, null);
         }
 
         return .{
-            .image = image,
+            .color_image = color_image,
+            .normal_image = normal_image,
             .sampler = sampler,
             .descriptor_sets = descriptor_sets,
             .allocator = allocator,
@@ -153,7 +200,8 @@ pub const Texture = struct {
     }
 
     pub fn deinit(self: *@This()) void {
-        self.image.deinit();
+        self.color_image.deinit();
+        self.normal_image.deinit();
         self.sampler.deinit();
         self.allocator.free(self.descriptor_sets);
     }

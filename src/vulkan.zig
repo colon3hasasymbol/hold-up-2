@@ -490,6 +490,8 @@ pub const LogicalDevice = struct {
         AllocateDescriptorSets: std.meta.Child(c.PFN_vkAllocateDescriptorSets) = undefined,
         UpdateDescriptorSets: std.meta.Child(c.PFN_vkUpdateDescriptorSets) = undefined,
         CmdBindDescriptorSets: std.meta.Child(c.PFN_vkCmdBindDescriptorSets) = undefined,
+        CmdSetViewport: std.meta.Child(c.PFN_vkCmdSetViewport) = undefined,
+        CmdSetScissor: std.meta.Child(c.PFN_vkCmdSetScissor) = undefined,
     };
 
     handle: c.VkDevice,
@@ -1295,10 +1297,9 @@ pub const CommandBuffer = struct {
 pub const DescriptorPool = struct {
     handle: c.VkDescriptorPool,
     device: *const LogicalDevice,
-    pipeline: *const Pipeline,
     allocation_callbacks: AllocationCallbacks,
 
-    pub fn init(device: *const LogicalDevice, pipeline: *const Pipeline, sizes: []c.VkDescriptorPoolSize, max_sets: u32, allocation_callbacks: AllocationCallbacks) !@This() {
+    pub fn init(device: *const LogicalDevice, sizes: []c.VkDescriptorPoolSize, max_sets: u32, allocation_callbacks: AllocationCallbacks) !@This() {
         const create_info = std.mem.zeroInit(c.VkDescriptorPoolCreateInfo, c.VkDescriptorPoolCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
             .poolSizeCount = @intCast(sizes.len),
@@ -1312,7 +1313,6 @@ pub const DescriptorPool = struct {
         return .{
             .handle = handle,
             .device = device,
-            .pipeline = pipeline,
             .allocation_callbacks = allocation_callbacks,
         };
     }
@@ -1321,10 +1321,10 @@ pub const DescriptorPool = struct {
         self.device.dispatch.DestroyDescriptorPool(self.device.handle, self.handle, self.allocation_callbacks);
     }
 
-    pub fn allocate(self: *@This(), count: u32, allocator: std.mem.Allocator) ![]c.VkDescriptorSet {
+    pub fn allocate(self: *@This(), pipeline: *Pipeline, count: u32, allocator: std.mem.Allocator) ![]c.VkDescriptorSet {
         const layouts = try allocator.alloc(c.VkDescriptorSetLayout, count);
         defer allocator.free(layouts);
-        @memset(layouts, self.pipeline.descriptor_layout);
+        @memset(layouts, pipeline.descriptor_layout);
 
         const allocate_info = std.mem.zeroInit(c.VkDescriptorSetAllocateInfo, c.VkDescriptorSetAllocateInfo{
             .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
