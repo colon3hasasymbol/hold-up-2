@@ -66,6 +66,10 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     const extensions = try window.getRequiredExtensions(allocator);
     defer allocator.free(extensions);
 
+    for (extensions) |extension| {
+        std.debug.print("{s}", .{extension});
+    }
+
     var instance = try vk.Instance.init(extensions, &vulkan_library, null);
     defer instance.deinit();
 
@@ -580,13 +584,13 @@ pub fn main() !void {
     defer std.debug.assert(general_purpose_allocator.deinit() == .ok);
     const allocator = general_purpose_allocator.allocator();
 
-    {
-        const exe_path = try std.fs.selfExeDirPathAlloc(allocator);
-        defer allocator.free(exe_path);
-        var dir = try std.fs.cwd().openDir(exe_path, .{});
-        defer dir.close();
-        try dir.setAsCwd();
-    }
+    // {
+    //     const exe_path = try std.fs.selfExeDirPathAlloc(allocator);
+    //     defer allocator.free(exe_path);
+    //     var dir = try std.fs.cwd().openDir(exe_path, .{});
+    //     defer dir.close();
+    //     try dir.setAsCwd();
+    // }
 
     conventional(allocator) catch |e| {
         var file = try std.fs.cwd().createFile("log.txt", .{});
