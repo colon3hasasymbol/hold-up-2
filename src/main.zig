@@ -295,6 +295,8 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
         old_colliding = is_colliding;
     }
+
+    // try logical_device.waitIdle();
 }
 
 pub fn main() !void {
