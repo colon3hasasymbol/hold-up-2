@@ -134,7 +134,7 @@ pub const Texture = struct {
         try color_image.transitionLayout(vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, vk.c.VK_ACCESS_TRANSFER_WRITE_BIT, vk.c.VK_ACCESS_SHADER_READ_BIT, vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT, vk.c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, command_pool);
         try color_image.createView(vk.ImageViewType.TYPE_2D, image_create_info.format, .{ .aspectMask = vk.c.VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1 });
 
-        image_create_info.format = vk.c.VK_FORMAT_R16G16B16A16_UNORM;
+        image_create_info.format = vk.c.VK_FORMAT_R8G8B8A8_UNORM;
 
         var normal_image = try vk.Image.init(device, image_create_info, allocation_callbacks);
         errdefer normal_image.deinit();
@@ -147,7 +147,7 @@ pub const Texture = struct {
         var sampler = try vk.Sampler.init(device, allocation_callbacks);
         errdefer sampler.deinit();
 
-        const descriptor_sets = try descriptor_pool.allocate(pipeline, descriptor_count * 2, allocator);
+        const descriptor_sets = try descriptor_pool.allocate(pipeline, descriptor_count, allocator);
 
         for (0..descriptor_count) |i| {
             const color_image_info = std.mem.zeroInit(vk.c.VkDescriptorImageInfo, vk.c.VkDescriptorImageInfo{
@@ -174,13 +174,15 @@ pub const Texture = struct {
 
             const normal_descriptor_write = std.mem.zeroInit(vk.c.VkWriteDescriptorSet, vk.c.VkWriteDescriptorSet{
                 .sType = vk.c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .dstSet = descriptor_sets[i + descriptor_count],
+                .dstSet = descriptor_sets[i],
                 .dstBinding = 1,
                 .dstArrayElement = 0,
                 .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                 .descriptorCount = 1,
                 .pImageInfo = &normal_image_info,
             });
+
+            // _ = normal_descriptor_write;
 
             const descriptor_writes = [_]vk.c.VkWriteDescriptorSet{
                 color_descriptor_write,

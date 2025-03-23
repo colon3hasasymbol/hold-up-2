@@ -218,6 +218,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
     const PushConstantData = struct {
         vp: zmath.Mat,
+        object: zmath.Mat,
     };
 
     const frag_spv align(@alignOf(u32)) = @embedFile("shaders/simple_shader.frag.spv").*;
@@ -229,10 +230,52 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     var vert_shader = try vk.ShaderModule.init(&logical_device, &vert_spv, null);
     defer vert_shader.deinit();
 
-    var pipeline1 = try vk.Pipeline.init(&logical_device, PushConstantData, @constCast(&[_]vk.c.VkDescriptorSetLayoutBinding{std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 0, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT })}), swapchain.render_pass, vk.c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, vk.c.VK_POLYGON_MODE_FILL, &frag_shader, &vert_shader, window_extent, gx.Model.Vertex.getAttributeDescriptions(), gx.Model.Vertex.getBindingDescriptions(), null);
+    var pipeline1 = try vk.Pipeline.init(
+        &logical_device,
+        PushConstantData,
+        @constCast(&[_]vk.c.VkDescriptorSetLayoutBinding{
+            std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 0, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT }),
+            std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 1, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT }),
+        }),
+        render_pass,
+        @constCast(&[_]vk.c.VkPipelineColorBlendAttachmentState{
+            .{ .colorWriteMask = vk.c.VK_COLOR_COMPONENT_R_BIT | vk.c.VK_COLOR_COMPONENT_G_BIT | vk.c.VK_COLOR_COMPONENT_B_BIT | vk.c.VK_COLOR_COMPONENT_A_BIT, .blendEnable = vk.c.VK_FALSE },
+            .{ .colorWriteMask = vk.c.VK_COLOR_COMPONENT_R_BIT | vk.c.VK_COLOR_COMPONENT_G_BIT | vk.c.VK_COLOR_COMPONENT_B_BIT | vk.c.VK_COLOR_COMPONENT_A_BIT, .blendEnable = vk.c.VK_FALSE },
+            .{ .colorWriteMask = vk.c.VK_COLOR_COMPONENT_R_BIT | vk.c.VK_COLOR_COMPONENT_G_BIT | vk.c.VK_COLOR_COMPONENT_B_BIT | vk.c.VK_COLOR_COMPONENT_A_BIT, .blendEnable = vk.c.VK_FALSE },
+        }),
+        vk.c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        vk.c.VK_POLYGON_MODE_FILL,
+        &frag_shader,
+        &vert_shader,
+        window_extent,
+        gx.Model.Vertex.getAttributeDescriptions(),
+        gx.Model.Vertex.getBindingDescriptions(),
+        null,
+    );
     defer pipeline1.deinit();
 
-    var pipeline2 = try vk.Pipeline.init(&logical_device, PushConstantData, @constCast(&[_]vk.c.VkDescriptorSetLayoutBinding{std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 0, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT })}), swapchain.render_pass, vk.c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, vk.c.VK_POLYGON_MODE_LINE, &frag_shader, &vert_shader, window_extent, gx.Model.Vertex.getAttributeDescriptions(), gx.Model.Vertex.getBindingDescriptions(), null);
+    var pipeline2 = try vk.Pipeline.init(
+        &logical_device,
+        PushConstantData,
+        @constCast(&[_]vk.c.VkDescriptorSetLayoutBinding{
+            std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 0, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT }),
+            std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 1, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT }),
+        }),
+        render_pass,
+        @constCast(&[_]vk.c.VkPipelineColorBlendAttachmentState{
+            .{ .colorWriteMask = vk.c.VK_COLOR_COMPONENT_R_BIT | vk.c.VK_COLOR_COMPONENT_G_BIT | vk.c.VK_COLOR_COMPONENT_B_BIT | vk.c.VK_COLOR_COMPONENT_A_BIT, .blendEnable = vk.c.VK_FALSE },
+            .{ .colorWriteMask = vk.c.VK_COLOR_COMPONENT_R_BIT | vk.c.VK_COLOR_COMPONENT_G_BIT | vk.c.VK_COLOR_COMPONENT_B_BIT | vk.c.VK_COLOR_COMPONENT_A_BIT, .blendEnable = vk.c.VK_FALSE },
+            .{ .colorWriteMask = vk.c.VK_COLOR_COMPONENT_R_BIT | vk.c.VK_COLOR_COMPONENT_G_BIT | vk.c.VK_COLOR_COMPONENT_B_BIT | vk.c.VK_COLOR_COMPONENT_A_BIT, .blendEnable = vk.c.VK_FALSE },
+        }),
+        vk.c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        vk.c.VK_POLYGON_MODE_LINE,
+        &frag_shader,
+        &vert_shader,
+        window_extent,
+        gx.Model.Vertex.getAttributeDescriptions(),
+        gx.Model.Vertex.getBindingDescriptions(),
+        null,
+    );
     defer pipeline2.deinit();
 
     const lighting_frag_spv align(@alignOf(u32)) = @embedFile("shaders/lighting_shader.frag.spv").*;
@@ -244,10 +287,31 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     var lighting_vert_shader = try vk.ShaderModule.init(&logical_device, &lighting_vert_spv, null);
     defer lighting_vert_shader.deinit();
 
-    var lighting_pipeline = try vk.Pipeline.init(&logical_device, PushConstantData, @constCast(&[_]vk.c.VkDescriptorSetLayoutBinding{std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 0, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT })}), swapchain.render_pass, vk.c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, vk.c.VK_POLYGON_MODE_FILL, &lighting_frag_shader, &lighting_vert_shader, window_extent, &[_]vk.c.VkVertexInputAttributeDescription{}, &[_]vk.c.VkVertexInputBindingDescription{}, null);
+    var lighting_pipeline = try vk.Pipeline.init(
+        &logical_device,
+        PushConstantData,
+        @constCast(&[_]vk.c.VkDescriptorSetLayoutBinding{
+            std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 0, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT }),
+            std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 1, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT }),
+            std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 2, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT }),
+        }),
+        swapchain.render_pass,
+        @constCast(&[_]vk.c.VkPipelineColorBlendAttachmentState{
+            .{ .colorWriteMask = vk.c.VK_COLOR_COMPONENT_R_BIT | vk.c.VK_COLOR_COMPONENT_G_BIT | vk.c.VK_COLOR_COMPONENT_B_BIT | vk.c.VK_COLOR_COMPONENT_A_BIT, .blendEnable = vk.c.VK_FALSE },
+        }),
+        vk.c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        vk.c.VK_POLYGON_MODE_FILL,
+        &lighting_frag_shader,
+        &lighting_vert_shader,
+        window_extent,
+        &[_]vk.c.VkVertexInputAttributeDescription{},
+        &[_]vk.c.VkVertexInputBindingDescription{},
+        null,
+    );
+
     defer lighting_pipeline.deinit();
 
-    const offsceen_descriptors = try descriptor_pool.allocate(&lighting_pipeline, @intCast(3 * swapchain.color_images.len), allocator);
+    const offsceen_descriptors = try descriptor_pool.allocate(&lighting_pipeline, @intCast(swapchain.color_images.len), allocator);
     defer allocator.free(offsceen_descriptors);
 
     for (0..swapchain.color_images.len) |i| {
@@ -275,8 +339,8 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
         const position_descriptor_write = vk.c.VkWriteDescriptorSet{
             .sType = vk.c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = offsceen_descriptors[i + 1],
-            .dstBinding = 0,
+            .dstSet = offsceen_descriptors[i],
+            .dstBinding = 1,
             .dstArrayElement = 0,
             .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
             .descriptorCount = 1,
@@ -291,8 +355,8 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
         const normal_descriptor_write = vk.c.VkWriteDescriptorSet{
             .sType = vk.c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = offsceen_descriptors[i + 2],
-            .dstBinding = 0,
+            .dstSet = offsceen_descriptors[i],
+            .dstBinding = 2,
             .dstArrayElement = 0,
             .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
             .descriptorCount = 1,
@@ -311,11 +375,11 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     for (command_buffers, 0..) |*command_buffer, i| {
         try command_buffer.begin();
 
-        swapchain.beginRenderPass(command_buffer, @intCast(i), .{ .r = 0.0, .g = 0.4, .b = 0.6, .a = 1.0 });
+        swapchain.beginRenderPass(command_buffer, @intCast(i), .{ .r = 0.0, .g = 0.0, .b = 0.1, .a = 1.0 });
 
         lighting_pipeline.bind(command_buffer);
 
-        logical_device.dispatch.CmdBindDescriptorSets(command_buffer.handle, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, lighting_pipeline.layout, 0, @intCast(offsceen_descriptors.len), offsceen_descriptors.ptr, 0, null);
+        logical_device.dispatch.CmdBindDescriptorSets(command_buffer.handle, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, lighting_pipeline.layout, 0, 1, &offsceen_descriptors[i], 0, null);
 
         swapchain.endRenderPass(command_buffer);
 
@@ -367,6 +431,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
     var push_constant_data = PushConstantData{
         .vp = zmath.identity(),
+        .object = zmath.identity(),
     };
 
     var old_colliding = false;
@@ -500,15 +565,13 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
         while (object_iterator.next()) |*object| {
             if (object.value_ptr.model) |model| {
                 if (object.value_ptr.pipeline) |pipeline| {
-                    if (object.value_ptr.transform) |transform| {
-                        const object_to_world = zmath.mul(zmath.matFromRollPitchYaw(transform[1][0], transform[1][1], transform[1][2]), zmath.translation(transform[0][0], transform[0][1], transform[0][2]));
-                        push_constant_data.vp = zmath.mul(object_to_world, world_to_clip);
-                    } else {
-                        push_constant_data.vp = world_to_clip;
-                    }
-                    if (object.value_ptr.texture) |texture| {
-                        logical_device.dispatch.CmdBindDescriptorSets(command_buffer.handle, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.layout, 0, 1, &texture.descriptor_sets[0], 0, null);
-                    }
+                    push_constant_data.vp = world_to_clip;
+                    push_constant_data.object = zmath.identity();
+
+                    if (object.value_ptr.transform) |transform| push_constant_data.object = zmath.mul(zmath.matFromRollPitchYaw(transform[1][0], transform[1][1], transform[1][2]), zmath.translation(transform[0][0], transform[0][1], transform[0][2]));
+
+                    if (object.value_ptr.texture) |texture| logical_device.dispatch.CmdBindDescriptorSets(command_buffer.handle, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.layout, 0, 1, &texture.descriptor_sets[0], 0, null);
+
                     pipeline.bind(&command_buffer);
                     command_buffer.pushConstants(pipeline.layout, vk.ShaderStage.VERTEX_BIT, &push_constant_data);
                     model.bind(&command_buffer);

@@ -151,11 +151,13 @@ pub const Window = struct {
     handle: ?*c.SDL_Window,
 
     pub fn init(title: [*c]const u8) !@This() {
-        const handle = c.SDL_CreateWindow(title, c.SDL_WINDOWPOS_UNDEFINED, c.SDL_WINDOWPOS_UNDEFINED, 800, 800, c.SDL_WINDOW_VULKAN | c.SDL_WINDOW_HIDDEN | c.SDL_WINDOW_RESIZABLE);
+        const handle = c.SDL_CreateWindow(title, c.SDL_WINDOWPOS_UNDEFINED, c.SDL_WINDOWPOS_UNDEFINED, 800, 800, c.SDL_WINDOW_VULKAN | c.SDL_WINDOW_HIDDEN);
         if (handle == null) {
             c.SDL_LogError(c.SDL_LOG_CATEGORY_APPLICATION, "%s", c.SDL_GetError());
             return error.SDLCreateWindow;
         }
+
+        if (c.SDL_SetWindowOpacity(handle, 0.2) < 0) return error.SDLSetWindowOpacity;
 
         return .{
             .handle = handle,
@@ -1377,7 +1379,7 @@ pub const Pipeline = struct {
     descriptor_layout: c.VkDescriptorSetLayout,
     allocation_callbacks: AllocationCallbacks,
 
-    pub fn init(device: *const LogicalDevice, PushConstantData: type, layout_bindings: []c.VkDescriptorSetLayoutBinding, render_pass: c.VkRenderPass, primitive_topology: c.VkPrimitiveTopology, polygon_mode: c.VkPolygonMode, frag_shader: *const ShaderModule, vert_shader: *const ShaderModule, extent: Extent2D, attribute_descriptions: []c.VkVertexInputAttributeDescription, binding_descriptions: []c.VkVertexInputBindingDescription, allocation_callbacks: AllocationCallbacks) !@This() {
+    pub fn init(device: *const LogicalDevice, PushConstantData: type, layout_bindings: []c.VkDescriptorSetLayoutBinding, render_pass: c.VkRenderPass, color_attachments: []c.VkPipelineColorBlendAttachmentState, primitive_topology: c.VkPrimitiveTopology, polygon_mode: c.VkPolygonMode, frag_shader: *const ShaderModule, vert_shader: *const ShaderModule, extent: Extent2D, attribute_descriptions: []c.VkVertexInputAttributeDescription, binding_descriptions: []c.VkVertexInputBindingDescription, allocation_callbacks: AllocationCallbacks) !@This() {
         const descriptor_layout_create_info = std.mem.zeroInit(c.VkDescriptorSetLayoutCreateInfo, c.VkDescriptorSetLayoutCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
             .bindingCount = @intCast(layout_bindings.len),
@@ -1451,16 +1453,11 @@ pub const Pipeline = struct {
             .rasterizationSamples = c.VK_SAMPLE_COUNT_1_BIT,
         });
 
-        const color_blend_attachment = std.mem.zeroInit(c.VkPipelineColorBlendAttachmentState, c.VkPipelineColorBlendAttachmentState{
-            .colorWriteMask = c.VK_COLOR_COMPONENT_R_BIT | c.VK_COLOR_COMPONENT_G_BIT | c.VK_COLOR_COMPONENT_B_BIT | c.VK_COLOR_COMPONENT_A_BIT,
-            .blendEnable = c.VK_FALSE,
-        });
-
         const color_blend_info = std.mem.zeroInit(c.VkPipelineColorBlendStateCreateInfo, c.VkPipelineColorBlendStateCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
             .logicOpEnable = c.VK_FALSE,
-            .attachmentCount = 1,
-            .pAttachments = &color_blend_attachment,
+            .attachmentCount = @intCast(color_attachments.len),
+            .pAttachments = color_attachments.ptr,
         });
 
         const depth_stencil_info = std.mem.zeroInit(c.VkPipelineDepthStencilStateCreateInfo, c.VkPipelineDepthStencilStateCreateInfo{
