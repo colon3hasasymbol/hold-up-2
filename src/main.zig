@@ -333,7 +333,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
         const position_image_info = vk.c.VkDescriptorImageInfo{
             .imageLayout = vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            .imageView = offscreen_albedo.view,
+            .imageView = offscreen_positions.view,
             .sampler = color_sampler,
         };
 
@@ -349,7 +349,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
         const normal_image_info = vk.c.VkDescriptorImageInfo{
             .imageLayout = vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            .imageView = offscreen_albedo.view,
+            .imageView = offscreen_normals.view,
             .sampler = color_sampler,
         };
 
@@ -375,11 +375,13 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     for (command_buffers, 0..) |*command_buffer, i| {
         try command_buffer.begin();
 
-        swapchain.beginRenderPass(command_buffer, @intCast(i), .{ .r = 0.0, .g = 0.0, .b = 0.1, .a = 1.0 });
+        swapchain.beginRenderPass(command_buffer, @intCast(i), .{ .r = 0.0, .g = 0.0, .b = 1.0, .a = 1.0 });
 
         lighting_pipeline.bind(command_buffer);
 
         logical_device.dispatch.CmdBindDescriptorSets(command_buffer.handle, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, lighting_pipeline.layout, 0, 1, &offsceen_descriptors[i], 0, null);
+
+        logical_device.dispatch.CmdDraw(command_buffer.handle, 6, 1, 0, 0);
 
         swapchain.endRenderPass(command_buffer);
 
@@ -400,8 +402,8 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     var triangle_model = try gx.Model.init(&logical_device, &vertices, null);
     defer triangle_model.deinit();
 
-    try game_world.spawn(.{ .transform = .{ .{ 0.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .texture = &texture1, .pipeline = &pipeline1, .aabb = shape }, "segment0");
-    try game_world.spawn(.{ .transform = .{ .{ 2.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .texture = &texture2, .pipeline = &pipeline2, .aabb = shape }, "segment1");
+    try game_world.spawn(.{ .transform = .{ .{ 0.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .texture = &texture1, .pipeline = &pipeline1, .aabb = shape }, "segment1");
+    try game_world.spawn(.{ .transform = .{ .{ 2.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .texture = &texture2, .pipeline = &pipeline2, .aabb = shape }, "segment0");
     // try game_world.spawn(.{ .transform = .{ .{ 0.0, 8.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .aabb = shape }, "segment2");
 
     // const start = zmath.Vec{ 0.0, 0.0, 0.0, 0.0 };
@@ -446,13 +448,13 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
                     try logical_device.waitIdle();
                     break :main_loop;
                 },
-                c.SDL_WINDOWEVENT => switch (event.window.event) {
-                    c.SDL_WINDOWEVENT_RESIZED => {
-                        swapchain.deinit();
-                        swapchain = try logical_device.createSwapchain(&surface, window.getExtent(), allocator, null);
-                    },
-                    else => {},
-                },
+                // c.SDL_WINDOWEVENT => switch (event.window.event) {
+                //     c.SDL_WINDOWEVENT_RESIZED => {
+                //         swapchain.deinit();
+                //         swapchain = try logical_device.createSwapchain(&surface, window.getExtent(), allocator, null);
+                //     },
+                //     else => {},
+                // },
                 c.SDL_KEYUP => {
                     switch (event.key.keysym.sym) {
                         c.SDLK_w => keyboard.w = false,
@@ -531,9 +533,9 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
         // swapchain.beginRenderPass(&command_buffer, image_index, .{ .r = 0.0, .g = 0.4, .b = 0.6, .a = 1.0 });
 
         const clear_values = [_]vk.c.VkClearValue{
-            .{ .color = .{ .float32 = .{ 0.0, 0.0, 0.0, 0.0 } } },
-            .{ .color = .{ .float32 = .{ 0.0, 0.0, 0.0, 0.0 } } },
-            .{ .color = .{ .float32 = .{ 0.0, 0.0, 0.0, 0.0 } } },
+            .{ .color = .{ .float32 = .{ 0.0, 1.0, 0.0, 1.0 } } },
+            .{ .color = .{ .float32 = .{ 0.0, 1.0, 0.0, 1.0 } } },
+            .{ .color = .{ .float32 = .{ 0.0, 1.0, 0.0, 1.0 } } },
             .{ .depthStencil = .{ .depth = 1.0, .stencil = 0 } },
         };
 
