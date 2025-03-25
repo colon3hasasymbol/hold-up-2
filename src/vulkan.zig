@@ -819,6 +819,131 @@ pub const Buffer = struct {
     }
 };
 
+pub const RenderPass = struct {
+    pub const Attachment = struct {
+        format: c.VkFormat = c.VK_FORMAT_R8G8B8A8_SRGB,
+    };
+
+    handle: c.VkRenderPass,
+    device: *const LogicalDevice,
+    allocation_callbacks: AllocationCallbacks,
+
+    pub fn init(device: *const LogicalDevice, color_attachments: []Attachment, has_depth: bool, allocator: std.mem.Allocator, allocation_callbacks: AllocationCallbacks) !@This() {
+        const depth_format = try device.findSupportedFormat(&[_]c.VkFormat{ c.VK_FORMAT_D32_SFLOAT, c.VK_FORMAT_D32_SFLOAT_S8_UINT, c.VK_FORMAT_D24_UNORM_S8_UINT }, c.VK_IMAGE_TILING_OPTIMAL, c.VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+
+        var attachment_descriptions = try allocator.alloc(c.VkAttachmentDescription, color_attachments.len + 1);
+        defer allocator.free(attachment_descriptions);
+        var attachment_references = try allocator.alloc(c.VkAttachmentReference, color_attachments.len + 1);
+        defer allocator.free(attachment_references);
+
+        if (has_depth) {
+            attachment_descriptions[0] = c.VkAttachmentDescription{
+                .format = depth_format,
+                .samples = c.VK_SAMPLE_COUNT_1_BIT,
+                .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
+                .storeOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                .stencilStoreOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+                .finalLayout = c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            };
+
+            attachment_references[0] = c.VkAttachmentReference{
+                .attachment = 0,
+                .layout = c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            };
+        }
+
+        for (color_attachments, if (has_depth) 1 else 0..) |color_attachment, i| {
+            attachment_descriptions[i] = c.VkAttachmentDescription{
+                .format = color_attachment.format,
+                .samples = c.VK_SAMPLE_COUNT_1_BIT,
+                .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
+                .storeOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                .stencilStoreOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+                .finalLayout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            };
+
+            attachment_references[i] = c.VkAttachmentReference{
+                .attachment = i,
+                .layout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            };
+        }
+
+        const subpass = c.VkSubpassDescription{
+            .pipelineBindPoint = c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            .colorAttachmentCount = attachment_descriptions[1..].len,
+            .pColorAttachments = attachment_references[1..].ptr,
+            .pDepthStencilAttachment = &attachment_references[0],
+        };
+
+        const dependency = c.VkSubpassDependency{
+            .dstSubpass = 0,
+            .dstAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | c.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+            .dstStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | c.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+            .srcSubpass = c.VK_SUBPASS_EXTERNAL,
+            .srcAccessMask = 0,
+            .srcStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | c.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+        };
+
+        const create_info = c.VkRenderPassCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+            .attachmentCount = attachment_descriptions.len,
+            .pAttachments = attachment_descriptions.ptr,
+            .subpassCount = 1,
+            .pSubpasses = &subpass,
+            .dependencyCount = 1,
+            .pDependencies = &dependency,
+        };
+
+        var handle: c.VkRenderPass = undefined;
+        if (device.dispatch.CreateRenderPass(device.handle, &create_info, allocation_callbacks, &handle) < 0) return error.VkCreateRenderPass;
+
+        return .{
+            .handle = handle,
+            .device = device,
+            .allocation_callbacks = allocation_callbacks,
+        };
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.device.dispatch.DestroyRenderPass(self.device.handle, self.handle, self.allocation_callbacks);
+    }
+};
+
+pub const Framebuffer = struct {
+    handle: c.VkFramebuffer,
+    device: *const LogicalDevice,
+    attachment_views: []c.VkImageView,
+    allocation_callbacks: AllocationCallbacks,
+    allocator: std.mem.Allocator,
+
+    pub fn init(device: *const LogicalDevice, extent: Extent2D, attachment_views: []c.VkImageView, render_pass: *const RenderPass, allocator: std.mem.Allocator, allocation_callbacks: AllocationCallbacks) !@This() {
+        const create_info = c.VkFramebufferCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+            .renderPass = render_pass.handle,
+            .attachmentCount = @intCast(attachment_views.len),
+            .pAttachments = attachment_views.ptr,
+            .width = extent.x,
+            .height = extent.y,
+            .layers = 1,
+        };
+
+        var handle: c.VkFramebuffer = undefined;
+        if (device.dispatch.CreateFramebuffer(device.handle, &create_info, allocation_callbacks, &handle) < 0) return error.VkCreateFrameBuffer;
+
+        return .{
+            .handle = handle,
+            .device = device,
+            .attachment_views = attachment_views,
+            .allocation_callbacks = allocation_callbacks,
+            .allocator = allocator,
+        };
+    }
+};
+
 pub const Swapchain = struct {
     handle: c.VkSwapchainKHR,
     allocation_callbacks: AllocationCallbacks,
@@ -980,7 +1105,8 @@ pub const Swapchain = struct {
         });
 
         var render_pass: c.VkRenderPass = undefined;
-        if (device.dispatch.CreateRenderPass(device.handle, &render_pass_info, null, &render_pass) < 0) return error.VkCreateRenderPass;
+        if (device.dispatch.CreateRenderPass(device.handle, &render_pass_info, allocation_callbacks, &render_pass) < 0) return error.VkCreateRenderPass;
+        errdefer device.dispatch.DestroyRenderPass(device.handle, render_pass, allocation_callbacks);
 
         var depth_images = try allocator.alloc(Image, image_count);
 
