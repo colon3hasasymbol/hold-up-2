@@ -1,8 +1,31 @@
 # Copyright 2025-Present Felix Sapora. All rights reserved.
 
-glslc src/shaders/simple_shader.frag -o src/shaders/simple_shader.frag.spv
-glslc src/shaders/simple_shader.vert -o src/shaders/simple_shader.vert.spv
-glslc src/shaders/ray_marching.frag -o src/shaders/ray_marching.frag.spv
-glslc src/shaders/ray_marching.vert -o src/shaders/ray_marching.vert.spv
-glslc src/shaders/lighting_shader.frag -o src/shaders/lighting_shader.frag.spv
-glslc src/shaders/lighting_shader.vert -o src/shaders/lighting_shader.vert.spv
+# Check if glslangValidator is available
+if ! command -v glslc &> /dev/null
+then
+    echo "glslc could not be found. Please install it."
+    exit 1
+fi
+
+# Loop through all .frag and .vert files in the current directory
+for shader_file in src/shaders/*.frag src/shaders/*.vert; do
+    # Only process files that exist (in case no .frag or .vert files are present)
+    if [ -f "$shader_file" ]; then
+        # Determine the base filename without the extension
+        base_filename="${shader_file%.*}"
+
+        # Compile fragment shaders (.frag)
+        if [[ "$shader_file" == *.frag ]]; then
+            echo "Compiling $shader_file to $base_filename.frag.spv"
+            glslc "$shader_file" -o "$base_filename.frag.spv"
+        fi
+
+        # Compile vertex shaders (.vert)
+        if [[ "$shader_file" == *.vert ]]; then
+            echo "Compiling $shader_file to $base_filename.vert.spv"
+            glslc "$shader_file" -o "$base_filename.vert.spv"
+        fi
+    fi
+done
+
+echo "Shader compilation complete."
