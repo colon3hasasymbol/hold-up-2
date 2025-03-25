@@ -918,9 +918,8 @@ pub const Framebuffer = struct {
     device: *const LogicalDevice,
     attachment_views: []c.VkImageView,
     allocation_callbacks: AllocationCallbacks,
-    allocator: std.mem.Allocator,
 
-    pub fn init(device: *const LogicalDevice, extent: Extent2D, attachment_views: []c.VkImageView, render_pass: *const RenderPass, allocator: std.mem.Allocator, allocation_callbacks: AllocationCallbacks) !@This() {
+    pub fn init(device: *const LogicalDevice, extent: Extent2D, attachment_views: []c.VkImageView, render_pass: *const RenderPass, allocation_callbacks: AllocationCallbacks) !@This() {
         const create_info = c.VkFramebufferCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
             .renderPass = render_pass.handle,
@@ -939,8 +938,11 @@ pub const Framebuffer = struct {
             .device = device,
             .attachment_views = attachment_views,
             .allocation_callbacks = allocation_callbacks,
-            .allocator = allocator,
         };
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.device.dispatch.DestroyFramebuffer(self.device, self.handle, self.allocation_callbacks);
     }
 };
 
