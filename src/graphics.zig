@@ -57,21 +57,31 @@ pub const Model = struct {
 
     vertex_buffer: vk.Buffer,
     vertex_count: u32,
+    index_buffer: vk.Buffer,
+    index_count: u32,
     device: *const vk.LogicalDevice,
     allocation_callbacks: vk.AllocationCallbacks,
 
-    pub fn init(device: *const vk.LogicalDevice, vertices: []const Vertex, allocation_callbacks: vk.AllocationCallbacks) !@This() {
+    pub fn init(device: *const vk.LogicalDevice, vertices: []const Vertex, indices: []const u32, allocation_callbacks: vk.AllocationCallbacks) !@This() {
         const vertex_count: u32 = @intCast(vertices.len);
+        const index_count: u32 = @intCast(indices.len);
 
-        const vertex_buffer_size: u64 = @sizeOf(@TypeOf(vertices[0])) * vertex_count;
+        const vertex_buffer_size: u64 = @sizeOf(Vertex) * vertex_count;
+        const index_buffer_size: u64 = @sizeOf(u32) * index_count;
 
         var vertex_buffer = try vk.Buffer.init(device, vertex_buffer_size, vk.BufferUsage.VERTEX_BUFFER_BIT, allocation_callbacks);
         try vertex_buffer.createMemory(vk.MemoryProperty.HOST_VISIBLE_BIT | vk.MemoryProperty.HOST_COHERENT_BIT);
         try vertex_buffer.uploadData(vertices);
 
+        var index_buffer = try vk.Buffer.init(device, index_buffer_size, vk.BufferUsage.INDEX_BUFFER_BIT, allocation_callbacks);
+        try index_buffer.createMemory(vk.MemoryProperty.HOST_VISIBLE_BIT | vk.MemoryProperty.HOST_COHERENT_BIT);
+        try index_buffer.uploadData(indices);
+
         return .{
             .vertex_buffer = vertex_buffer,
             .vertex_count = vertex_count,
+            .index_buffer = index_buffer,
+            .index_count = index_count,
             .device = device,
             .allocation_callbacks = allocation_callbacks,
         };
@@ -79,14 +89,16 @@ pub const Model = struct {
 
     pub fn deinit(self: *@This()) void {
         self.vertex_buffer.deinit();
+        self.index_buffer.deinit();
     }
 
     pub fn bind(self: *@This(), command_buffer: *vk.CommandBuffer) void {
         self.device.dispatch.CmdBindVertexBuffers(command_buffer.handle, 0, 1, &self.vertex_buffer.handle, &[_]u64{0});
+        self.device.dispatch.CmdBindIndexBuffer(command_buffer.handle, self.index_buffer.handle, 0, vk.c.VK_INDEX_TYPE_UINT32);
     }
 
     pub fn draw(self: *@This(), command_buffer: *vk.CommandBuffer) void {
-        self.device.dispatch.CmdDraw(command_buffer.handle, self.vertex_count, 1, 0, 0);
+        self.device.dispatch.CmdDrawIndexed(command_buffer.handle, self.index_count, 1, 0, 0, 0);
     }
 };
 

@@ -494,6 +494,8 @@ pub const LogicalDevice = struct {
         CmdBindDescriptorSets: std.meta.Child(c.PFN_vkCmdBindDescriptorSets) = undefined,
         CmdSetViewport: std.meta.Child(c.PFN_vkCmdSetViewport) = undefined,
         CmdSetScissor: std.meta.Child(c.PFN_vkCmdSetScissor) = undefined,
+        CmdDrawIndexed: std.meta.Child(c.PFN_vkCmdDrawIndexed) = undefined,
+        CmdBindIndexBuffer: std.meta.Child(c.PFN_vkCmdBindIndexBuffer) = undefined,
     };
 
     handle: c.VkDevice,

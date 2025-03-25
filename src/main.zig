@@ -398,8 +398,9 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     // shape.max[2] = 2.0;
     // shape.min[2] = -2.0;
     const vertices = shape.vertices();
+    const indices = px.BoundingBox.indices();
 
-    var triangle_model = try gx.Model.init(&logical_device, &vertices, null);
+    var triangle_model = try gx.Model.init(&logical_device, &vertices, &indices, null);
     defer triangle_model.deinit();
 
     try game_world.spawn(.{ .transform = .{ .{ 0.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .texture = &texture1, .pipeline = &pipeline1, .aabb = shape }, "segment1");
