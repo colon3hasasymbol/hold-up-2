@@ -1,3 +1,5 @@
+// Copyright 2025-Present Felix Sapora. All rights reserved.
+
 #version 450
 
 layout(binding = 0) uniform sampler2D u_col;
