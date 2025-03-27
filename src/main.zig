@@ -334,21 +334,21 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
         logical_device.dispatch.UpdateDescriptorSets(logical_device.handle, @intCast(descriptor_writes.len), &descriptor_writes, 0, null);
     }
 
-    for (command_buffers, 0..) |*command_buffer, i| {
-        try command_buffer.begin();
+    // for (command_buffers, 0..) |*command_buffer, i| {
+    //     try command_buffer.begin();
 
-        swapchain.beginRenderPass(command_buffer, @intCast(i), .{ .r = 0.0, .g = 0.0, .b = 1.0, .a = 1.0 });
+    //     swapchain.beginRenderPass(command_buffer, @intCast(i), .{ .r = 0.0, .g = 0.0, .b = 1.0, .a = 1.0 });
 
-        lighting_pipeline.bind(command_buffer);
+    //     lighting_pipeline.bind(command_buffer);
 
-        logical_device.dispatch.CmdBindDescriptorSets(command_buffer.handle, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, lighting_pipeline.layout, 0, 1, &offsceen_descriptors[i], 0, null);
+    //     logical_device.dispatch.CmdBindDescriptorSets(command_buffer.handle, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, lighting_pipeline.layout, 0, 1, &offsceen_descriptors[i], 0, null);
 
-        logical_device.dispatch.CmdDraw(command_buffer.handle, 6, 1, 0, 0);
+    //     logical_device.dispatch.CmdDraw(command_buffer.handle, 6, 1, 0, 0);
 
-        swapchain.endRenderPass(command_buffer);
+    //     swapchain.endRenderPass(command_buffer);
 
-        try command_buffer.end();
-    }
+    //     try command_buffer.end();
+    // }
 
     var texture1 = try gx.Texture.init(&logical_device, &command_pool, &pipeline1, &descriptor_pool, 1, "textures/the f word :3.png", allocator, null);
     defer texture1.deinit();
@@ -460,7 +460,10 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
                         c.SDLK_l => keyboard.l = true,
                         c.SDLK_n => keyboard.n = true,
                         c.SDLK_m => keyboard.m = true,
-                        c.SDLK_ESCAPE => return,
+                        c.SDLK_ESCAPE => {
+                            try logical_device.waitIdle();
+                            break :main_loop;
+                        },
 
                         else => {},
                     }
@@ -505,9 +508,9 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
         const clear_values = [_]vk.c.VkClearValue{
             .{ .depthStencil = .{ .depth = 1.0, .stencil = 0 } },
-            .{ .color = .{ .float32 = .{ 0.0, 0.0, 1.0, 1.0 } } },
-            .{ .color = .{ .float32 = .{ 0.0, 0.0, 1.0, 1.0 } } },
-            .{ .color = .{ .float32 = .{ 0.0, 0.0, 1.0, 1.0 } } },
+            .{ .color = .{ .float32 = .{ 0.0, 0.75, 1.0, 1.0 } } },
+            .{ .color = .{ .float32 = .{ 0.0, 0.75, 1.0, 1.0 } } },
+            .{ .color = .{ .float32 = .{ 0.0, 0.75, 1.0, 1.0 } } },
         };
 
         const render_pass_begin_info = vk.c.VkRenderPassBeginInfo{
@@ -559,6 +562,22 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
         try command_buffer.end();
 
+        var onscreen_command_buffer = command_buffers[image_index];
+
+        try onscreen_command_buffer.begin();
+
+        swapchain.beginRenderPass(&onscreen_command_buffer, image_index, .{ .r = 0.0, .g = 0.0, .b = 1.0, .a = 1.0 });
+
+        lighting_pipeline.bind(&onscreen_command_buffer);
+
+        logical_device.dispatch.CmdBindDescriptorSets(onscreen_command_buffer.handle, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, lighting_pipeline.layout, 0, 1, &offsceen_descriptors[image_index], 0, null);
+
+        logical_device.dispatch.CmdDraw(onscreen_command_buffer.handle, 6, 1, 0, 0);
+
+        swapchain.endRenderPass(&onscreen_command_buffer);
+
+        try onscreen_command_buffer.end();
+
         const wait_stage = vk.c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
         var submit_info = vk.c.VkSubmitInfo{
@@ -574,7 +593,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
         if (logical_device.dispatch.QueueSubmit(logical_device.graphics_queue, 1, &submit_info, null) < 0) return error.VkQueueSubmit;
 
-        submit_info.pCommandBuffers = &command_buffers[image_index].handle;
+        submit_info.pCommandBuffers = &onscreen_command_buffer.handle;
         submit_info.pWaitSemaphores = &offscreen_semaphore;
         submit_info.pSignalSemaphores = &render_semaphore;
 
