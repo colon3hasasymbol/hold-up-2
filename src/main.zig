@@ -100,74 +100,36 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     try offscreen_albedo.createMemory(vk.MemoryProperty.DEVICE_LOCAL_BIT);
     try offscreen_albedo.createView(vk.ImageViewType.TYPE_2D, vk.c.VK_FORMAT_R8G8B8A8_UNORM, .{ .aspectMask = vk.c.VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1 });
 
-    var offscreen_positions = try vk.Image.init(&logical_device, .{ .sType = vk.c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = vk.c.VK_IMAGE_TYPE_2D, .format = vk.c.VK_FORMAT_R16G16B16A16_UNORM, .extent = .{ .width = window_extent.x, .height = window_extent.y, .depth = 1 }, .mipLevels = 1, .arrayLayers = 1, .samples = vk.c.VK_SAMPLE_COUNT_1_BIT, .tiling = vk.c.VK_IMAGE_TILING_OPTIMAL, .usage = vk.c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | vk.c.VK_IMAGE_USAGE_SAMPLED_BIT }, null);
+    var offscreen_positions = try vk.Image.init(&logical_device, .{ .sType = vk.c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = vk.c.VK_IMAGE_TYPE_2D, .format = vk.c.VK_FORMAT_R16G16B16A16_SFLOAT, .extent = .{ .width = window_extent.x, .height = window_extent.y, .depth = 1 }, .mipLevels = 1, .arrayLayers = 1, .samples = vk.c.VK_SAMPLE_COUNT_1_BIT, .tiling = vk.c.VK_IMAGE_TILING_OPTIMAL, .usage = vk.c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | vk.c.VK_IMAGE_USAGE_SAMPLED_BIT }, null);
     defer offscreen_positions.deinit();
     try offscreen_positions.createMemory(vk.MemoryProperty.DEVICE_LOCAL_BIT);
-    try offscreen_positions.createView(vk.ImageViewType.TYPE_2D, vk.c.VK_FORMAT_R16G16B16A16_UNORM, .{ .aspectMask = vk.c.VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1 });
+    try offscreen_positions.createView(vk.ImageViewType.TYPE_2D, vk.c.VK_FORMAT_R16G16B16A16_SFLOAT, .{ .aspectMask = vk.c.VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1 });
 
-    var offscreen_normals = try vk.Image.init(&logical_device, .{ .sType = vk.c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = vk.c.VK_IMAGE_TYPE_2D, .format = vk.c.VK_FORMAT_R16G16B16A16_UNORM, .extent = .{ .width = window_extent.x, .height = window_extent.y, .depth = 1 }, .mipLevels = 1, .arrayLayers = 1, .samples = vk.c.VK_SAMPLE_COUNT_1_BIT, .tiling = vk.c.VK_IMAGE_TILING_OPTIMAL, .usage = vk.c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | vk.c.VK_IMAGE_USAGE_SAMPLED_BIT }, null);
+    var offscreen_normals = try vk.Image.init(&logical_device, .{ .sType = vk.c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = vk.c.VK_IMAGE_TYPE_2D, .format = vk.c.VK_FORMAT_R16G16B16A16_SFLOAT, .extent = .{ .width = window_extent.x, .height = window_extent.y, .depth = 1 }, .mipLevels = 1, .arrayLayers = 1, .samples = vk.c.VK_SAMPLE_COUNT_1_BIT, .tiling = vk.c.VK_IMAGE_TILING_OPTIMAL, .usage = vk.c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | vk.c.VK_IMAGE_USAGE_SAMPLED_BIT }, null);
     defer offscreen_normals.deinit();
     try offscreen_normals.createMemory(vk.MemoryProperty.DEVICE_LOCAL_BIT);
-    try offscreen_normals.createView(vk.ImageViewType.TYPE_2D, vk.c.VK_FORMAT_R16G16B16A16_UNORM, .{ .aspectMask = vk.c.VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1 });
+    try offscreen_normals.createView(vk.ImageViewType.TYPE_2D, vk.c.VK_FORMAT_R16G16B16A16_SFLOAT, .{ .aspectMask = vk.c.VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1 });
 
     const depth_format = try logical_device.findSupportedFormat(&[_]vk.c.VkFormat{ vk.c.VK_FORMAT_D32_SFLOAT, vk.c.VK_FORMAT_D32_SFLOAT_S8_UINT, vk.c.VK_FORMAT_D24_UNORM_S8_UINT }, vk.c.VK_IMAGE_TILING_OPTIMAL, vk.c.VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
-    var offscreen_depth = try vk.Image.init(&logical_device, .{ .sType = vk.c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = vk.c.VK_IMAGE_TYPE_2D, .format = depth_format, .extent = .{ .width = window_extent.x, .height = window_extent.y, .depth = 1 }, .mipLevels = 1, .arrayLayers = 1, .samples = vk.c.VK_SAMPLE_COUNT_1_BIT, .tiling = vk.c.VK_IMAGE_TILING_OPTIMAL, .usage = vk.c.VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | vk.c.VK_IMAGE_USAGE_SAMPLED_BIT }, null);
+    var offscreen_depth = try vk.Image.init(&logical_device, .{ .sType = vk.c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = vk.c.VK_IMAGE_TYPE_2D, .format = depth_format, .extent = .{ .width = window_extent.x, .height = window_extent.y, .depth = 1 }, .mipLevels = 1, .arrayLayers = 1, .samples = vk.c.VK_SAMPLE_COUNT_1_BIT, .tiling = vk.c.VK_IMAGE_TILING_OPTIMAL, .usage = vk.c.VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT }, null);
     defer offscreen_depth.deinit();
     try offscreen_depth.createMemory(vk.MemoryProperty.DEVICE_LOCAL_BIT);
     try offscreen_depth.createView(vk.ImageViewType.TYPE_2D, depth_format, .{ .aspectMask = vk.c.VK_IMAGE_ASPECT_DEPTH_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1 });
 
-    const attachment_descriptions = [_]vk.c.VkAttachmentDescription{
-        vk.c.VkAttachmentDescription{ .samples = vk.c.VK_SAMPLE_COUNT_1_BIT, .loadOp = vk.c.VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = vk.c.VK_ATTACHMENT_STORE_OP_STORE, .stencilLoadOp = vk.c.VK_ATTACHMENT_LOAD_OP_DONT_CARE, .stencilStoreOp = vk.c.VK_ATTACHMENT_STORE_OP_DONT_CARE, .initialLayout = vk.c.VK_IMAGE_LAYOUT_UNDEFINED, .finalLayout = vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, .format = vk.c.VK_FORMAT_R8G8B8A8_UNORM },
-        vk.c.VkAttachmentDescription{ .samples = vk.c.VK_SAMPLE_COUNT_1_BIT, .loadOp = vk.c.VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = vk.c.VK_ATTACHMENT_STORE_OP_STORE, .stencilLoadOp = vk.c.VK_ATTACHMENT_LOAD_OP_DONT_CARE, .stencilStoreOp = vk.c.VK_ATTACHMENT_STORE_OP_DONT_CARE, .initialLayout = vk.c.VK_IMAGE_LAYOUT_UNDEFINED, .finalLayout = vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, .format = vk.c.VK_FORMAT_R16G16B16A16_UNORM },
-        vk.c.VkAttachmentDescription{ .samples = vk.c.VK_SAMPLE_COUNT_1_BIT, .loadOp = vk.c.VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = vk.c.VK_ATTACHMENT_STORE_OP_STORE, .stencilLoadOp = vk.c.VK_ATTACHMENT_LOAD_OP_DONT_CARE, .stencilStoreOp = vk.c.VK_ATTACHMENT_STORE_OP_DONT_CARE, .initialLayout = vk.c.VK_IMAGE_LAYOUT_UNDEFINED, .finalLayout = vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, .format = vk.c.VK_FORMAT_R16G16B16A16_UNORM },
-        vk.c.VkAttachmentDescription{ .samples = vk.c.VK_SAMPLE_COUNT_1_BIT, .loadOp = vk.c.VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = vk.c.VK_ATTACHMENT_STORE_OP_STORE, .stencilLoadOp = vk.c.VK_ATTACHMENT_LOAD_OP_DONT_CARE, .stencilStoreOp = vk.c.VK_ATTACHMENT_STORE_OP_DONT_CARE, .initialLayout = vk.c.VK_IMAGE_LAYOUT_UNDEFINED, .finalLayout = vk.c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, .format = depth_format },
-    };
-
-    const color_references = [_]vk.c.VkAttachmentReference{
-        vk.c.VkAttachmentReference{ .attachment = 0, .layout = vk.c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL },
-        vk.c.VkAttachmentReference{ .attachment = 1, .layout = vk.c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL },
-        vk.c.VkAttachmentReference{ .attachment = 2, .layout = vk.c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL },
-    };
-
-    const depth_reference = vk.c.VkAttachmentReference{ .attachment = 3, .layout = vk.c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
-
-    const subpass = vk.c.VkSubpassDescription{
-        .pipelineBindPoint = vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .pColorAttachments = &color_references,
-        .colorAttachmentCount = @intCast(color_references.len),
-        .pDepthStencilAttachment = &depth_reference,
-    };
-
-    const subpass_dependencies = [_]vk.c.VkSubpassDependency{
-        vk.c.VkSubpassDependency{ .srcSubpass = vk.c.VK_SUBPASS_EXTERNAL, .dstSubpass = 0, .srcStageMask = vk.c.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, .dstStageMask = vk.c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, .srcAccessMask = vk.c.VK_ACCESS_MEMORY_READ_BIT, .dstAccessMask = vk.c.VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | vk.c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, .dependencyFlags = vk.c.VK_DEPENDENCY_BY_REGION_BIT },
-        vk.c.VkSubpassDependency{ .srcSubpass = 0, .dstSubpass = vk.c.VK_SUBPASS_EXTERNAL, .srcStageMask = vk.c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, .dstStageMask = vk.c.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, .srcAccessMask = vk.c.VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | vk.c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, .dstAccessMask = vk.c.VK_ACCESS_MEMORY_READ_BIT, .dependencyFlags = vk.c.VK_DEPENDENCY_BY_REGION_BIT },
-    };
-
-    const render_pass_create_info = vk.c.VkRenderPassCreateInfo{
-        .sType = vk.c.VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-        .pAttachments = &attachment_descriptions,
-        .attachmentCount = @intCast(attachment_descriptions.len),
-        .pSubpasses = &subpass,
-        .subpassCount = 1,
-        .pDependencies = &subpass_dependencies,
-        .dependencyCount = @intCast(subpass_dependencies.len),
-    };
-
-    var render_pass: vk.c.VkRenderPass = undefined;
-    if (logical_device.dispatch.CreateRenderPass(logical_device.handle, &render_pass_create_info, null, &render_pass) < 0) return error.VkCreateRenderPass;
-    defer logical_device.dispatch.DestroyRenderPass(logical_device.handle, render_pass, null);
+    var render_pass = try vk.RenderPass.init(&logical_device, &[_]vk.RenderPass.Attachment{ .{ .format = vk.c.VK_FORMAT_R8G8B8A8_UNORM, .layout = vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL }, .{ .format = vk.c.VK_FORMAT_R16G16B16A16_SFLOAT, .layout = vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL }, .{ .format = vk.c.VK_FORMAT_R16G16B16A16_SFLOAT, .layout = vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } }, true, allocator, null);
+    defer render_pass.deinit();
 
     const attachments = [_]vk.c.VkImageView{
+        offscreen_depth.view,
         offscreen_albedo.view,
         offscreen_positions.view,
         offscreen_normals.view,
-        offscreen_depth.view,
     };
 
     const framebuffer_create_info = vk.c.VkFramebufferCreateInfo{
         .sType = vk.c.VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-        .renderPass = render_pass,
+        .renderPass = render_pass.handle,
         .pAttachments = &attachments,
         .attachmentCount = @intCast(attachments.len),
         .width = window_extent.x,
@@ -237,7 +199,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
             std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 0, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT }),
             std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 1, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT }),
         }),
-        render_pass,
+        render_pass.handle,
         @constCast(&[_]vk.c.VkPipelineColorBlendAttachmentState{
             .{ .colorWriteMask = vk.c.VK_COLOR_COMPONENT_R_BIT | vk.c.VK_COLOR_COMPONENT_G_BIT | vk.c.VK_COLOR_COMPONENT_B_BIT | vk.c.VK_COLOR_COMPONENT_A_BIT, .blendEnable = vk.c.VK_FALSE },
             .{ .colorWriteMask = vk.c.VK_COLOR_COMPONENT_R_BIT | vk.c.VK_COLOR_COMPONENT_G_BIT | vk.c.VK_COLOR_COMPONENT_B_BIT | vk.c.VK_COLOR_COMPONENT_A_BIT, .blendEnable = vk.c.VK_FALSE },
@@ -261,7 +223,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
             std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 0, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT }),
             std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 1, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT }),
         }),
-        render_pass,
+        render_pass.handle,
         @constCast(&[_]vk.c.VkPipelineColorBlendAttachmentState{
             .{ .colorWriteMask = vk.c.VK_COLOR_COMPONENT_R_BIT | vk.c.VK_COLOR_COMPONENT_G_BIT | vk.c.VK_COLOR_COMPONENT_B_BIT | vk.c.VK_COLOR_COMPONENT_A_BIT, .blendEnable = vk.c.VK_FALSE },
             .{ .colorWriteMask = vk.c.VK_COLOR_COMPONENT_R_BIT | vk.c.VK_COLOR_COMPONENT_G_BIT | vk.c.VK_COLOR_COMPONENT_B_BIT | vk.c.VK_COLOR_COMPONENT_A_BIT, .blendEnable = vk.c.VK_FALSE },
@@ -425,6 +387,8 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
         j: bool,
         k: bool,
         l: bool,
+        n: bool,
+        m: bool,
     };
 
     var keyboard = std.mem.zeroes(Keyboard);
@@ -472,6 +436,8 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
                         c.SDLK_j => keyboard.j = false,
                         c.SDLK_k => keyboard.k = false,
                         c.SDLK_l => keyboard.l = false,
+                        c.SDLK_n => keyboard.n = false,
+                        c.SDLK_m => keyboard.m = false,
 
                         else => {},
                     }
@@ -492,6 +458,8 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
                         c.SDLK_j => keyboard.j = true,
                         c.SDLK_k => keyboard.k = true,
                         c.SDLK_l => keyboard.l = true,
+                        c.SDLK_n => keyboard.n = true,
+                        c.SDLK_m => keyboard.m = true,
                         c.SDLK_ESCAPE => return,
 
                         else => {},
@@ -508,6 +476,8 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
         if (keyboard.a) camera_movement[0] -= 0.01;
         if (keyboard.lshift) camera_movement[1] += 0.01;
         if (keyboard.space) camera_movement[1] -= 0.01;
+
+        camera_movement = zmath.mul(zmath.rotationY(camera_rotation[1]), camera_movement);
 
         camera_position += camera_movement;
 
@@ -534,15 +504,15 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
         // swapchain.beginRenderPass(&command_buffer, image_index, .{ .r = 0.0, .g = 0.4, .b = 0.6, .a = 1.0 });
 
         const clear_values = [_]vk.c.VkClearValue{
-            .{ .color = .{ .float32 = .{ 0.0, 1.0, 0.0, 1.0 } } },
-            .{ .color = .{ .float32 = .{ 0.0, 1.0, 0.0, 1.0 } } },
-            .{ .color = .{ .float32 = .{ 0.0, 1.0, 0.0, 1.0 } } },
             .{ .depthStencil = .{ .depth = 1.0, .stencil = 0 } },
+            .{ .color = .{ .float32 = .{ 0.0, 0.0, 1.0, 1.0 } } },
+            .{ .color = .{ .float32 = .{ 0.0, 0.0, 1.0, 1.0 } } },
+            .{ .color = .{ .float32 = .{ 0.0, 0.0, 1.0, 1.0 } } },
         };
 
         const render_pass_begin_info = vk.c.VkRenderPassBeginInfo{
             .sType = vk.c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-            .renderPass = render_pass,
+            .renderPass = render_pass.handle,
             .framebuffer = framebuffer,
             .renderArea = .{ .extent = .{ .width = window_extent.x, .height = window_extent.y } },
             .clearValueCount = @intCast(clear_values.len),
@@ -632,6 +602,8 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
         if (keyboard.k) pos1.*[2] += 0.01;
         if (keyboard.j) pos1.*[0] -= 0.01;
         if (keyboard.l) pos1.*[0] += 0.01;
+        if (keyboard.n) pos1.*[1] -= 0.01;
+        if (keyboard.m) pos1.*[1] += 0.01;
 
         const shape0 = px.Shape{ .box = .{ .bounds = segment0.aabb.? } };
         const shape1 = px.Shape{ .box = .{ .bounds = segment1.aabb.? } };
