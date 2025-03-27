@@ -220,3 +220,173 @@ pub const Texture = struct {
         self.allocator.free(self.descriptor_sets);
     }
 };
+
+pub const TextRenderer = struct {
+    pub const Character = struct {
+        transform: [3]@Vector(3, f32),
+        character: u32,
+    };
+
+    const PushConstantData = struct {
+        text_block_transform: [3]@Vector(3, f32),
+    };
+
+    device: *const vk.LogicalDevice,
+    pipeline: vk.Pipeline,
+    text_buffer: vk.Buffer,
+    character_count: u64,
+    font_atlas_image: vk.Image,
+    font_atlas_sampler: vk.Sampler,
+    descriptor_sets: []vk.c.VkDescriptorSet,
+    allocator: std.mem.Allocator,
+    allocation_callbacks: vk.AllocationCallbacks,
+
+    pub fn init(device: *const vk.LogicalDevice, render_pass: *const vk.RenderPass, extent: vk.Extent2D, descriptor_count: u32, descriptor_pool: vk.DescriptorPool, command_pool: vk.CommandPool, font_atlas_file_path: []const u8, allocator: std.mem.Allocator, allocation_callbacks: vk.AllocationCallbacks) !@This() {
+        const frag_spv align(@alignOf(u32)) = @embedFile("shaders/lighting_shader.frag.spv").*;
+        const vert_spv align(@alignOf(u32)) = @embedFile("shaders/lighting_shader.vert.spv").*;
+
+        var frag_shader = try vk.ShaderModule.init(device, &frag_spv, null);
+        defer frag_shader.deinit();
+
+        var vert_shader = try vk.ShaderModule.init(device, &vert_spv, null);
+        defer vert_shader.deinit();
+
+        var pipeline = try vk.Pipeline.init(
+            device,
+            PushConstantData,
+            @constCast(&[_]vk.c.VkDescriptorSetLayoutBinding{
+                std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 0, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_VERTEX_BIT }),
+                std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 0, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT }),
+            }),
+            render_pass.handle,
+            @constCast(&[_]vk.c.VkPipelineColorBlendAttachmentState{
+                .{ .colorWriteMask = vk.c.VK_COLOR_COMPONENT_R_BIT | vk.c.VK_COLOR_COMPONENT_G_BIT | vk.c.VK_COLOR_COMPONENT_B_BIT | vk.c.VK_COLOR_COMPONENT_A_BIT, .blendEnable = vk.c.VK_FALSE },
+            }),
+            vk.c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+            vk.c.VK_POLYGON_MODE_FILL,
+            &frag_shader,
+            &vert_shader,
+            extent,
+            &[_]vk.c.VkVertexInputAttributeDescription{},
+            &[_]vk.c.VkVertexInputBindingDescription{},
+            null,
+        );
+        errdefer pipeline.deinit();
+
+        var text_buffer = try vk.Buffer.init(device, @sizeOf(Character) * 1024, vk.c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, allocation_callbacks);
+        try text_buffer.createMemory(vk.c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | vk.c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        try text_buffer.map();
+
+        var texture_width: c_int = undefined;
+        var texture_height: c_int = undefined;
+        var texture_channels: c_int = undefined;
+
+        const pixels = stbi.stbi_load(@ptrCast(font_atlas_file_path), &texture_width, &texture_height, &texture_channels, stbi.STBI_rgb_alpha);
+        if (pixels == null) return error.StbiLoad;
+        defer stbi.stbi_image_free(pixels);
+        const size: u64 = @as(u64, @intCast(texture_width)) * @as(u64, @intCast(texture_height)) * 4;
+
+        const image_create_info = std.mem.zeroInit(vk.c.VkImageCreateInfo, vk.c.VkImageCreateInfo{
+            .sType = vk.c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+            .imageType = vk.c.VK_IMAGE_TYPE_2D,
+            .extent = .{
+                .width = @intCast(texture_width),
+                .height = @intCast(texture_height),
+                .depth = 1,
+            },
+            .mipLevels = 1,
+            .arrayLayers = 1,
+            .format = vk.c.VK_FORMAT_R8G8B8A8_SRGB,
+            .tiling = vk.c.VK_IMAGE_TILING_OPTIMAL,
+            .initialLayout = vk.c.VK_IMAGE_LAYOUT_UNDEFINED,
+            .usage = vk.c.VK_IMAGE_USAGE_TRANSFER_DST_BIT | vk.c.VK_IMAGE_USAGE_SAMPLED_BIT,
+            .samples = vk.c.VK_SAMPLE_COUNT_1_BIT,
+            .sharingMode = vk.c.VK_SHARING_MODE_EXCLUSIVE,
+            .flags = 0,
+        });
+
+        var font_atlas_image = try vk.Image.init(device, image_create_info, allocation_callbacks);
+        errdefer font_atlas_image.deinit();
+        try font_atlas_image.createMemory(vk.c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        try font_atlas_image.transitionLayout(vk.c.VK_IMAGE_LAYOUT_UNDEFINED, vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, vk.c.VK_ACCESS_TRANSFER_WRITE_BIT, vk.c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT, command_pool);
+        try font_atlas_image.uploadData(pixels[0..size], command_pool);
+        try font_atlas_image.transitionLayout(vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, vk.c.VK_ACCESS_TRANSFER_WRITE_BIT, vk.c.VK_ACCESS_SHADER_READ_BIT, vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT, vk.c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, command_pool);
+        try font_atlas_image.createView(vk.ImageViewType.TYPE_2D, image_create_info.format, .{ .aspectMask = vk.c.VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1 });
+
+        var font_atlas_sampler = try vk.Sampler.init(device, allocation_callbacks);
+        errdefer font_atlas_sampler.deinit();
+
+        const descriptor_sets = try descriptor_pool.allocate(&pipeline, descriptor_count, allocator);
+        errdefer allocator.free(descriptor_sets);
+
+        for (0..descriptor_count) |i| {
+            const text_info = vk.c.VkDescriptorBufferInfo{
+                .buffer = text_buffer.handle,
+                .offset = 0,
+                .range = vk.c.VK_WHOLE_SIZE,
+            };
+
+            const text_write = vk.c.VkWriteDescriptorSet{
+                .sType = vk.c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .dstSet = descriptor_sets[i],
+                .dstBinding = 0,
+                .dstArrayElement = 0,
+                .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .descriptorCount = 1,
+                .pBufferInfo = &text_info,
+            };
+
+            const font_atlas_info = vk.c.VkDescriptorImageInfo{
+                .imageLayout = vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .imageView = font_atlas_image,
+                .sampler = font_atlas_sampler,
+            };
+
+            const font_atlas_write = vk.c.VkWriteDescriptorSet{
+                .sType = vk.c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .dstSet = descriptor_sets[i],
+                .dstBinding = 0,
+                .dstArrayElement = 0,
+                .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .descriptorCount = 1,
+                .pImageInfo = &font_atlas_info,
+            };
+
+            const descriptor_writes = [_]vk.c.VkWriteDescriptorSet{
+                text_write,
+                font_atlas_write,
+            };
+
+            device.dispatch.UpdateDescriptorSets(device.handle, @intCast(descriptor_writes.len), &descriptor_writes, 0, null);
+        }
+
+        return .{
+            .device = device,
+            .pipeline = pipeline,
+            .text_buffer = text_buffer,
+            .character_count = 0,
+            .descriptor_sets = descriptor_sets,
+            .allocator = allocator,
+            .allocation_callbacks = allocation_callbacks,
+        };
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.allocator.free(self.descriptor_sets);
+        self.font_atlas_sampler.deinit();
+        self.font_atlas_image.deinit();
+        self.text_buffer.deinit();
+        self.pipeline.deinit();
+    }
+
+    pub fn print(self: *@This(), text: []const Character) void {
+        @memcpy(@as(*Character, self.text_buffer.mapped.?)[self.character_count..1024], text);
+        self.character_count += text.len;
+    }
+
+    pub fn recordCommands(self: *@This(), command_buffer: *vk.CommandBuffer, image_index: u32) void {
+        self.pipeline.bind(command_buffer);
+        self.device.dispatch.CmdBindDescriptorSets(command_buffer.handle, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline.layout, 0, 1, &self.descriptor_sets[image_index], 0, null);
+        self.device.dispatch.CmdDraw(command_buffer.handle, 6, self.character_count, 0, 0);
+    }
+};

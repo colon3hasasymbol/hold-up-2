@@ -829,7 +829,7 @@ pub const RenderPass = struct {
     device: *const LogicalDevice,
     allocation_callbacks: AllocationCallbacks,
 
-    pub fn init(device: *const LogicalDevice, color_attachments: []const Attachment, has_depth: bool, allocator: std.mem.Allocator, allocation_callbacks: AllocationCallbacks) !@This() {
+    pub fn init(device: *const LogicalDevice, color_attachments: []const Attachment, has_depth: bool, double_pass: bool, allocator: std.mem.Allocator, allocation_callbacks: AllocationCallbacks) !@This() {
         const depth_format = try device.findSupportedFormat(&[_]c.VkFormat{ c.VK_FORMAT_D32_SFLOAT, c.VK_FORMAT_D32_SFLOAT_S8_UINT, c.VK_FORMAT_D24_UNORM_S8_UINT }, c.VK_IMAGE_TILING_OPTIMAL, c.VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
         var attachment_descriptions = try allocator.alloc(c.VkAttachmentDescription, color_attachments.len + 1);
@@ -889,16 +889,7 @@ pub const RenderPass = struct {
             .pDepthStencilAttachment = &attachment_references[0],
         };
 
-        // const dependency = c.VkSubpassDependency{
-        //     .dstSubpass = 0,
-        //     .dstAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | c.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-        //     .dstStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | c.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-        //     .srcSubpass = c.VK_SUBPASS_EXTERNAL,
-        //     .srcAccessMask = 0,
-        //     .srcStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | c.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-        // };
-
-        const subpass_dependencies = [_]c.VkSubpassDependency{
+        const subpass_dependencies = if (double_pass) [2]c.VkSubpassDependency{
             c.VkSubpassDependency{
                 .srcSubpass = c.VK_SUBPASS_EXTERNAL,
                 .dstSubpass = 0,
@@ -917,6 +908,16 @@ pub const RenderPass = struct {
                 .dstAccessMask = c.VK_ACCESS_MEMORY_READ_BIT,
                 .dependencyFlags = c.VK_DEPENDENCY_BY_REGION_BIT,
             },
+        } else [2]c.VkSubpassDependency{
+            c.VkSubpassDependency{
+                .dstSubpass = 0,
+                .dstAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | c.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                .dstStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | c.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+                .srcSubpass = c.VK_SUBPASS_EXTERNAL,
+                .srcAccessMask = 0,
+                .srcStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | c.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+            },
+            std.mem.zeroes(c.VkSubpassDependency),
         };
 
         const create_info = c.VkRenderPassCreateInfo{
@@ -925,7 +926,7 @@ pub const RenderPass = struct {
             .pAttachments = attachment_descriptions.ptr,
             .subpassCount = 1,
             .pSubpasses = &subpass,
-            .dependencyCount = @intCast(subpass_dependencies.len),
+            .dependencyCount = if (double_pass) 2 else 1,
             .pDependencies = &subpass_dependencies,
         };
 
@@ -984,7 +985,7 @@ pub const Swapchain = struct {
     device: *const LogicalDevice,
     color_images: []Image,
     depth_images: []Image,
-    render_pass: c.VkRenderPass,
+    render_pass: RenderPass,
     frame_buffers: []c.VkFramebuffer,
     image_available_semaphores: []c.VkSemaphore,
     render_finished_semaphores: []c.VkSemaphore,
@@ -1077,69 +1078,72 @@ pub const Swapchain = struct {
 
         const depth_format = try device.findSupportedFormat(&[_]c.VkFormat{ c.VK_FORMAT_D32_SFLOAT, c.VK_FORMAT_D32_SFLOAT_S8_UINT, c.VK_FORMAT_D24_UNORM_S8_UINT }, c.VK_IMAGE_TILING_OPTIMAL, c.VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
-        const depth_attachment = std.mem.zeroInit(c.VkAttachmentDescription, c.VkAttachmentDescription{
-            .format = depth_format,
-            .samples = c.VK_SAMPLE_COUNT_1_BIT,
-            .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
-            .storeOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
-            .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-            .stencilStoreOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
-            .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
-            .finalLayout = c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        });
+        // const depth_attachment = std.mem.zeroInit(c.VkAttachmentDescription, c.VkAttachmentDescription{
+        //     .format = depth_format,
+        //     .samples = c.VK_SAMPLE_COUNT_1_BIT,
+        //     .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
+        //     .storeOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        //     .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        //     .stencilStoreOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        //     .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+        //     .finalLayout = c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        // });
 
-        const depth_attachment_ref = std.mem.zeroInit(c.VkAttachmentReference, c.VkAttachmentReference{
-            .attachment = 1,
-            .layout = c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        });
+        // const depth_attachment_ref = std.mem.zeroInit(c.VkAttachmentReference, c.VkAttachmentReference{
+        //     .attachment = 1,
+        //     .layout = c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        // });
 
-        const color_attachment = std.mem.zeroInit(c.VkAttachmentDescription, c.VkAttachmentDescription{
-            .format = surface_format.format,
-            .samples = c.VK_SAMPLE_COUNT_1_BIT,
-            .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
-            .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
-            .stencilStoreOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
-            .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-            .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
-            .finalLayout = c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        });
+        // const color_attachment = std.mem.zeroInit(c.VkAttachmentDescription, c.VkAttachmentDescription{
+        //     .format = surface_format.format,
+        //     .samples = c.VK_SAMPLE_COUNT_1_BIT,
+        //     .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
+        //     .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
+        //     .stencilStoreOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        //     .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        //     .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+        //     .finalLayout = c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        // });
 
-        const color_attachment_ref = std.mem.zeroInit(c.VkAttachmentReference, c.VkAttachmentReference{
-            .attachment = 0,
-            .layout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        });
+        // const color_attachment_ref = std.mem.zeroInit(c.VkAttachmentReference, c.VkAttachmentReference{
+        //     .attachment = 0,
+        //     .layout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        // });
 
-        const subpass = std.mem.zeroInit(c.VkSubpassDescription, c.VkSubpassDescription{
-            .pipelineBindPoint = c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-            .colorAttachmentCount = 1,
-            .pColorAttachments = &color_attachment_ref,
-            .pDepthStencilAttachment = &depth_attachment_ref,
-        });
+        // const subpass = std.mem.zeroInit(c.VkSubpassDescription, c.VkSubpassDescription{
+        //     .pipelineBindPoint = c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+        //     .colorAttachmentCount = 1,
+        //     .pColorAttachments = &color_attachment_ref,
+        //     .pDepthStencilAttachment = &depth_attachment_ref,
+        // });
 
-        const dependency = std.mem.zeroInit(c.VkSubpassDependency, c.VkSubpassDependency{
-            .dstSubpass = 0,
-            .dstAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | c.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-            .dstStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | c.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-            .srcSubpass = c.VK_SUBPASS_EXTERNAL,
-            .srcAccessMask = 0,
-            .srcStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | c.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-        });
+        // const dependency = std.mem.zeroInit(c.VkSubpassDependency, c.VkSubpassDependency{
+        //     .dstSubpass = 0,
+        //     .dstAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | c.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        //     .dstStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | c.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+        //     .srcSubpass = c.VK_SUBPASS_EXTERNAL,
+        //     .srcAccessMask = 0,
+        //     .srcStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | c.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+        // });
 
-        const attachments = [_]c.VkAttachmentDescription{ color_attachment, depth_attachment };
+        // const attachments = [_]c.VkAttachmentDescription{ color_attachment, depth_attachment };
 
-        const render_pass_info = std.mem.zeroInit(c.VkRenderPassCreateInfo, c.VkRenderPassCreateInfo{
-            .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-            .attachmentCount = attachments.len,
-            .pAttachments = &attachments,
-            .subpassCount = 1,
-            .pSubpasses = &subpass,
-            .dependencyCount = 1,
-            .pDependencies = &dependency,
-        });
+        // const render_pass_info = std.mem.zeroInit(c.VkRenderPassCreateInfo, c.VkRenderPassCreateInfo{
+        //     .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        //     .attachmentCount = attachments.len,
+        //     .pAttachments = &attachments,
+        //     .subpassCount = 1,
+        //     .pSubpasses = &subpass,
+        //     .dependencyCount = 1,
+        //     .pDependencies = &dependency,
+        // });
 
-        var render_pass: c.VkRenderPass = undefined;
-        if (device.dispatch.CreateRenderPass(device.handle, &render_pass_info, allocation_callbacks, &render_pass) < 0) return error.VkCreateRenderPass;
-        errdefer device.dispatch.DestroyRenderPass(device.handle, render_pass, allocation_callbacks);
+        // var render_pass: c.VkRenderPass = undefined;
+        // if (device.dispatch.CreateRenderPass(device.handle, &render_pass_info, allocation_callbacks, &render_pass) < 0) return error.VkCreateRenderPass;
+        // errdefer device.dispatch.DestroyRenderPass(device.handle, render_pass, allocation_callbacks);
+
+        var render_pass = try RenderPass.init(device, &[_]RenderPass.Attachment{.{ .format = surface_format.format, .layout = c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR }}, true, false, allocator, allocation_callbacks);
+        errdefer render_pass.deinit();
 
         var depth_images = try allocator.alloc(Image, image_count);
 
@@ -1181,11 +1185,11 @@ pub const Swapchain = struct {
         var frame_buffers = try allocator.alloc(c.VkFramebuffer, image_count);
 
         for (color_images, depth_images, 0..) |*color_image, *depth_image, i| {
-            const frame_buffer_attachments = [_]c.VkImageView{ color_image.view, depth_image.view };
+            const frame_buffer_attachments = [_]c.VkImageView{ depth_image.view, color_image.view };
 
             const frame_buffer_create_info = std.mem.zeroInit(c.VkFramebufferCreateInfo, c.VkFramebufferCreateInfo{
                 .sType = c.VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-                .renderPass = render_pass,
+                .renderPass = render_pass.handle,
                 .attachmentCount = @intCast(frame_buffer_attachments.len),
                 .pAttachments = &frame_buffer_attachments,
                 .width = extent.width,
@@ -1256,7 +1260,7 @@ pub const Swapchain = struct {
         }
         self.allocator.free(self.frame_buffers);
 
-        self.device.dispatch.DestroyRenderPass(self.device.handle, self.render_pass, self.allocation_callbacks);
+        self.render_pass.deinit();
 
         for (self.image_available_semaphores, self.render_finished_semaphores, self.in_flight_fences) |image_semaphore, render_semaphore, fence| {
             self.device.dispatch.DestroySemaphore(self.device.handle, image_semaphore, self.allocation_callbacks);
@@ -1316,16 +1320,16 @@ pub const Swapchain = struct {
     pub fn beginRenderPass(self: *@This(), command_buffer: *CommandBuffer, image_index: u32, clear_color: ClearColor) void {
         const clear_values = [_]c.VkClearValue{
             c.VkClearValue{
-                .color = c.VkClearColorValue{ .float32 = .{ clear_color.r, clear_color.g, clear_color.b, clear_color.a } },
+                .depthStencil = c.VkClearDepthStencilValue{ .depth = 1.0, .stencil = 0 },
             },
             c.VkClearValue{
-                .depthStencil = c.VkClearDepthStencilValue{ .depth = 1.0, .stencil = 0 },
+                .color = c.VkClearColorValue{ .float32 = .{ clear_color.r, clear_color.g, clear_color.b, clear_color.a } },
             },
         };
 
         const begin_info = std.mem.zeroInit(c.VkRenderPassBeginInfo, c.VkRenderPassBeginInfo{
             .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-            .renderPass = self.render_pass,
+            .renderPass = self.render_pass.handle,
             .framebuffer = self.frame_buffers[image_index],
             .renderArea = c.VkRect2D{
                 .offset = c.VkOffset2D{ .x = 0, .y = 0 },

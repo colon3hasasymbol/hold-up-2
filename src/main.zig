@@ -117,7 +117,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     try offscreen_depth.createMemory(vk.MemoryProperty.DEVICE_LOCAL_BIT);
     try offscreen_depth.createView(vk.ImageViewType.TYPE_2D, depth_format, .{ .aspectMask = vk.c.VK_IMAGE_ASPECT_DEPTH_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1 });
 
-    var render_pass = try vk.RenderPass.init(&logical_device, &[_]vk.RenderPass.Attachment{ .{ .format = vk.c.VK_FORMAT_R8G8B8A8_UNORM, .layout = vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL }, .{ .format = vk.c.VK_FORMAT_R16G16B16A16_SFLOAT, .layout = vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL }, .{ .format = vk.c.VK_FORMAT_R16G16B16A16_SFLOAT, .layout = vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } }, true, allocator, null);
+    var render_pass = try vk.RenderPass.init(&logical_device, &[_]vk.RenderPass.Attachment{ .{ .format = vk.c.VK_FORMAT_R8G8B8A8_UNORM, .layout = vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL }, .{ .format = vk.c.VK_FORMAT_R16G16B16A16_SFLOAT, .layout = vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL }, .{ .format = vk.c.VK_FORMAT_R16G16B16A16_SFLOAT, .layout = vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } }, true, true, allocator, null);
     defer render_pass.deinit();
 
     const attachments = [_]vk.c.VkImageView{
@@ -257,7 +257,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
             std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 1, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT }),
             std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 2, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT }),
         }),
-        swapchain.render_pass,
+        swapchain.render_pass.handle,
         @constCast(&[_]vk.c.VkPipelineColorBlendAttachmentState{
             .{ .colorWriteMask = vk.c.VK_COLOR_COMPONENT_R_BIT | vk.c.VK_COLOR_COMPONENT_G_BIT | vk.c.VK_COLOR_COMPONENT_B_BIT | vk.c.VK_COLOR_COMPONENT_A_BIT, .blendEnable = vk.c.VK_FALSE },
         }),
