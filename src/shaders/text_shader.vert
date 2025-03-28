@@ -1,5 +1,12 @@
 // Copyright 2025-Present Felix Sapora. All rights reserved.
 
+// .{ 0.0, 0.0 },
+// .{ 1.0, 1.0 },
+// .{ 0.0, 1.0 },
+// .{ 0.0, 0.0 },
+// .{ 1.0, 0.0 },
+// .{ 1.0, 1.0 },
+
 #version 450
 
 struct Character {
@@ -24,11 +31,11 @@ const vec2 vertex_positions[] = {
 
 const vec2 vertex_uv_map[] = {
         vec2(0.0, 0.0),
-        vec2(0.01075268817, 0.0),
-        vec2(0.0, 1.0),
-        vec2(0.01075268817, 0.0),
         vec2(0.01075268817, 1.0),
         vec2(0.0, 1.0),
+        vec2(0.0, 0.0),
+        vec2(0.01075268817, 0.0),
+        vec2(0.01075268817, 1.0),
     };
 
 void main() {
