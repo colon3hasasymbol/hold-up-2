@@ -11,23 +11,32 @@ layout(std140, binding = 0) readonly buffer Characters {
     Character characters[];
 } characters;
 
-layout(push_constant) uniform Push {
-    mat3 text_block_transform;
-} push;
-
 layout(location = 0) out vec2 frag_uv;
 
-const vec2 character_uv_map[] = {
+const vec2 vertex_positions[] = {
         vec2(0.0, 0.0),
-        vec2(0.5, 0.0)
+        vec2(1.0, 0.0),
+        vec2(0.0, 1.0),
+        vec2(1.0, 0.0),
+        vec2(1.0, 1.0),
+        vec2(0.0, 1.0),
+    };
+
+const vec2 vertex_uv_map[] = {
+        vec2(0.0, 0.0),
+        vec2(0.01075268817, 0.0),
+        vec2(0.0, 1.0),
+        vec2(0.01075268817, 0.0),
+        vec2(0.01075268817, 1.0),
+        vec2(0.0, 1.0),
     };
 
 void main() {
     Character character = characters.characters[gl_InstanceIndex];
 
-    vec2 uv = vec2((gl_VertexIndex << 1) & 2, gl_VertexIndex & 2);
-    vec2 uv_offset = character_uv_map[character.character];
+    vec2 uv = vertex_uv_map[gl_VertexIndex];
+    float uv_offset = 0.01075268817 * character.character;
 
-    frag_uv = vec2((uv.x / character_uv_map.length()) + uv_offset.x, uv.y + uv_offset.y);
-    gl_Position = vec4(((character.transform * vec3(frag_uv * 2.0f - 1.0f, 1.0f)).xy), 0.0, 1.0);
+    frag_uv = vec2(uv.x + uv_offset, uv.y);
+    gl_Position = vec4((character.transform * vec3(vertex_positions[gl_VertexIndex], 1.0)).xy, 0.5, 1.0);
 }

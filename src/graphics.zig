@@ -234,16 +234,16 @@ pub const TextRenderer = struct {
     device: *const vk.LogicalDevice,
     pipeline: vk.Pipeline,
     text_buffer: vk.Buffer,
-    character_count: u64,
+    character_count: u32,
     font_atlas_image: vk.Image,
     font_atlas_sampler: vk.Sampler,
     descriptor_sets: []vk.c.VkDescriptorSet,
     allocator: std.mem.Allocator,
     allocation_callbacks: vk.AllocationCallbacks,
 
-    pub fn init(device: *const vk.LogicalDevice, render_pass: *const vk.RenderPass, extent: vk.Extent2D, descriptor_count: u32, descriptor_pool: vk.DescriptorPool, command_pool: vk.CommandPool, font_atlas_file_path: []const u8, allocator: std.mem.Allocator, allocation_callbacks: vk.AllocationCallbacks) !@This() {
-        const frag_spv align(@alignOf(u32)) = @embedFile("shaders/lighting_shader.frag.spv").*;
-        const vert_spv align(@alignOf(u32)) = @embedFile("shaders/lighting_shader.vert.spv").*;
+    pub fn init(device: *const vk.LogicalDevice, render_pass: *const vk.RenderPass, extent: vk.Extent2D, descriptor_count: u32, descriptor_pool: *vk.DescriptorPool, command_pool: *vk.CommandPool, font_atlas_file_path: []const u8, allocator: std.mem.Allocator, allocation_callbacks: vk.AllocationCallbacks) !@This() {
+        const frag_spv align(@alignOf(u32)) = @embedFile("shaders/text_shader.frag.spv").*;
+        const vert_spv align(@alignOf(u32)) = @embedFile("shaders/text_shader.vert.spv").*;
 
         var frag_shader = try vk.ShaderModule.init(device, &frag_spv, null);
         defer frag_shader.deinit();
@@ -256,7 +256,7 @@ pub const TextRenderer = struct {
             PushConstantData,
             @constCast(&[_]vk.c.VkDescriptorSetLayoutBinding{
                 std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 0, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_VERTEX_BIT }),
-                std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 0, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT }),
+                std.mem.zeroInit(vk.c.VkDescriptorSetLayoutBinding, .{ .binding = 1, .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT }),
             }),
             render_pass.handle,
             @constCast(&[_]vk.c.VkPipelineColorBlendAttachmentState{
@@ -275,7 +275,7 @@ pub const TextRenderer = struct {
 
         var text_buffer = try vk.Buffer.init(device, @sizeOf(Character) * 1024, vk.c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, allocation_callbacks);
         try text_buffer.createMemory(vk.c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | vk.c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-        try text_buffer.map();
+        _ = try text_buffer.map();
 
         var texture_width: c_int = undefined;
         var texture_height: c_int = undefined;
@@ -338,14 +338,14 @@ pub const TextRenderer = struct {
 
             const font_atlas_info = vk.c.VkDescriptorImageInfo{
                 .imageLayout = vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                .imageView = font_atlas_image,
-                .sampler = font_atlas_sampler,
+                .imageView = font_atlas_image.view,
+                .sampler = font_atlas_sampler.handle,
             };
 
             const font_atlas_write = vk.c.VkWriteDescriptorSet{
                 .sType = vk.c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .dstSet = descriptor_sets[i],
-                .dstBinding = 0,
+                .dstBinding = 1,
                 .dstArrayElement = 0,
                 .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                 .descriptorCount = 1,
@@ -365,6 +365,8 @@ pub const TextRenderer = struct {
             .pipeline = pipeline,
             .text_buffer = text_buffer,
             .character_count = 0,
+            .font_atlas_image = font_atlas_image,
+            .font_atlas_sampler = font_atlas_sampler,
             .descriptor_sets = descriptor_sets,
             .allocator = allocator,
             .allocation_callbacks = allocation_callbacks,
@@ -380,8 +382,8 @@ pub const TextRenderer = struct {
     }
 
     pub fn print(self: *@This(), text: []const Character) void {
-        @memcpy(@as(*Character, self.text_buffer.mapped.?)[self.character_count..1024], text);
-        self.character_count += text.len;
+        @memcpy(@as([*]Character, @alignCast(@ptrCast(self.text_buffer.mapped.?)))[self.character_count .. self.character_count + text.len], text);
+        self.character_count += @intCast(text.len);
     }
 
     pub fn recordCommands(self: *@This(), command_buffer: *vk.CommandBuffer, image_index: u32) void {

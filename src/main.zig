@@ -46,6 +46,14 @@ pub const GameWorld = struct {
     }
 };
 
+pub fn make_transform_mat(position: @Vector(2, f32), scale: @Vector(2, f32)) [3]@Vector(3, f32) {
+    return .{
+        .{ scale[0], 0.0, 0.0 },
+        .{ 0.0, scale[1], 0.0 },
+        .{ position[0], position[1], 1.0 },
+    };
+}
+
 pub fn conventional(allocator: std.mem.Allocator) !void {
     var game_world = try GameWorld.init(allocator);
     defer game_world.deinit();
@@ -90,7 +98,18 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     const command_buffers = try command_pool.allocate(@intCast(swapchain.color_images.len), allocator);
     defer allocator.free(command_buffers);
 
-    var descriptor_pool = try vk.DescriptorPool.init(&logical_device, @constCast(&[_]vk.c.VkDescriptorPoolSize{.{ .type = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = @intCast((2 * 2) + (3 * swapchain.color_images.len)) }}), @intCast((2 * 2) + (3 * swapchain.color_images.len)), null);
+    const image_descriptor_count = (2 * 2) + (3 * swapchain.color_images.len) + 5;
+    const storage_descriptor_count = 1 * swapchain.color_images.len;
+
+    var descriptor_pool = try vk.DescriptorPool.init(
+        &logical_device,
+        @constCast(&[_]vk.c.VkDescriptorPoolSize{
+            .{ .type = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = @intCast(image_descriptor_count) },
+            .{ .type = vk.c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = @intCast(storage_descriptor_count) },
+        }),
+        @intCast(image_descriptor_count + storage_descriptor_count),
+        null,
+    );
     defer descriptor_pool.deinit();
 
     const window_extent = window.getExtent();
@@ -356,6 +375,28 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     var texture2 = try gx.Texture.init(&logical_device, &command_pool, &pipeline1, &descriptor_pool, 1, "textures/map.png", allocator, null);
     defer texture2.deinit();
 
+    var text_renderer = try gx.TextRenderer.init(&logical_device, &swapchain.render_pass, swapchain.extent, @intCast(swapchain.color_images.len), &descriptor_pool, &command_pool, "textures/the f word :3.png", allocator, null);
+    defer text_renderer.deinit();
+
+    const characters = [_]gx.TextRenderer.Character{
+        gx.TextRenderer.Character{ .character = 0, .transform = make_transform_mat(.{ 0.0, 0.0 }, .{ 0.1, 0.1 }) },
+        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
+        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
+        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
+        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
+        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
+        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
+        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
+        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
+        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
+        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
+        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
+        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
+        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
+    };
+
+    text_renderer.print(&characters);
+
     var shape = px.BoundingBox.cube1x1();
     // shape.max[2] = 2.0;
     // shape.min[2] = -2.0;
@@ -389,6 +430,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
         l: bool,
         n: bool,
         m: bool,
+        t: bool,
     };
 
     var keyboard = std.mem.zeroes(Keyboard);
@@ -438,6 +480,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
                         c.SDLK_l => keyboard.l = false,
                         c.SDLK_n => keyboard.n = false,
                         c.SDLK_m => keyboard.m = false,
+                        c.SDLK_t => keyboard.t = false,
 
                         else => {},
                     }
@@ -460,6 +503,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
                         c.SDLK_l => keyboard.l = true,
                         c.SDLK_n => keyboard.n = true,
                         c.SDLK_m => keyboard.m = true,
+                        c.SDLK_t => keyboard.t = true,
                         c.SDLK_ESCAPE => {
                             try logical_device.waitIdle();
                             break :main_loop;
@@ -573,6 +617,8 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
         logical_device.dispatch.CmdBindDescriptorSets(onscreen_command_buffer.handle, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, lighting_pipeline.layout, 0, 1, &offsceen_descriptors[image_index], 0, null);
 
         logical_device.dispatch.CmdDraw(onscreen_command_buffer.handle, 6, 1, 0, 0);
+
+        if (keyboard.t) text_renderer.recordCommands(&onscreen_command_buffer, image_index);
 
         swapchain.endRenderPass(&onscreen_command_buffer);
 
