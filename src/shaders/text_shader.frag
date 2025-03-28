@@ -10,4 +10,5 @@ layout(binding = 1) uniform sampler2D u_tex;
 
 void main() {
     out_color = texture(u_tex, frag_uv);
+    if (out_color.a == 0.0) discard;
 }

@@ -375,11 +375,11 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     var texture2 = try gx.Texture.init(&logical_device, &command_pool, &pipeline1, &descriptor_pool, 1, "textures/map.png", allocator, null);
     defer texture2.deinit();
 
-    var text_renderer = try gx.TextRenderer.init(&logical_device, &swapchain.render_pass, swapchain.extent, @intCast(swapchain.color_images.len), &descriptor_pool, &command_pool, "textures/the f word :3.png", allocator, null);
+    var text_renderer = try gx.TextRenderer.init(&logical_device, &swapchain.render_pass, swapchain.extent, @intCast(swapchain.color_images.len), &descriptor_pool, &command_pool, "textures/font.png", allocator, null);
     defer text_renderer.deinit();
 
     const characters = [_]gx.TextRenderer.Character{
-        gx.TextRenderer.Character{ .character = 0, .transform = make_transform_mat(.{ 0.0, 0.0 }, .{ 0.1, 0.1 }) },
+        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.0 }, .{ 0.5, 0.5 }) },
         gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
         gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
         gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
