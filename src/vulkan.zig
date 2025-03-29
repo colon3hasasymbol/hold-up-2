@@ -619,6 +619,24 @@ pub const LogicalDevice = struct {
 };
 
 pub const Image = struct {
+    // sType: VkStructureType = @import("std").mem.zeroes(VkStructureType),
+    // pNext: ?*const anyopaque = @import("std").mem.zeroes(?*const anyopaque),
+    // flags: VkImageCreateFlags = @import("std").mem.zeroes(VkImageCreateFlags),
+    // imageType: VkImageType = @import("std").mem.zeroes(VkImageType),
+    // format: VkFormat = @import("std").mem.zeroes(VkFormat),
+    // extent: VkExtent3D = @import("std").mem.zeroes(VkExtent3D),
+    // mipLevels: u32 = @import("std").mem.zeroes(u32),
+    // arrayLayers: u32 = @import("std").mem.zeroes(u32),
+    // samples: VkSampleCountFlagBits = @import("std").mem.zeroes(VkSampleCountFlagBits),
+    // tiling: VkImageTiling = @import("std").mem.zeroes(VkImageTiling),
+    // usage: VkImageUsageFlags = @import("std").mem.zeroes(VkImageUsageFlags),
+    // sharingMode: VkSharingMode = @import("std").mem.zeroes(VkSharingMode),
+    // queueFamilyIndexCount: u32 = @import("std").mem.zeroes(u32),
+    // pQueueFamilyIndices: [*c]const u32 = @import("std").mem.zeroes([*c]const u32),
+    // initialLayout: VkImageLayout = @import("std").mem.zeroes(VkImageLayout),
+
+    pub const CreateInfo = struct { format: c.VkFormat };
+
     handle: c.VkImage,
     view: c.VkImageView,
     memory: c.VkDeviceMemory,

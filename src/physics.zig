@@ -123,6 +123,87 @@ pub const BoundingBox = struct {
     }
 };
 
+pub const OrientedBox = struct {
+    bounds: BoundingBox,
+    rotation: zmath.Quat,
+
+    pub fn overlapping(self: @This(), other: @This()) bool {
+        const self_normals = [_]zmath.Vec{
+            zmath.rotate(self.rotation, .{ 1.0, 0.0, 0.0, 1.0 }),
+            zmath.rotate(self.rotation, .{ 0.0, 1.0, 0.0, 1.0 }),
+            zmath.rotate(self.rotation, .{ 0.0, 0.0, 1.0, 1.0 }),
+        };
+
+        const other_normals = [_]zmath.Vec{
+            zmath.rotate(other.rotation, .{ 1.0, 0.0, 0.0, 1.0 }),
+            zmath.rotate(other.rotation, .{ 0.0, 1.0, 0.0, 1.0 }),
+            zmath.rotate(other.rotation, .{ 0.0, 0.0, 1.0, 1.0 }),
+        };
+
+        const axes = [_]zmath.Vec{
+            self_normals[0],
+            self_normals[1],
+            self_normals[2],
+            other_normals[0],
+            other_normals[1],
+            other_normals[2],
+            zmath.cross3(self_normals[0], other_normals[0]),
+            zmath.cross3(self_normals[0], other_normals[1]),
+            zmath.cross3(self_normals[0], other_normals[2]),
+            zmath.cross3(self_normals[1], other_normals[0]),
+            zmath.cross3(self_normals[1], other_normals[1]),
+            zmath.cross3(self_normals[1], other_normals[2]),
+            zmath.cross3(self_normals[2], other_normals[0]),
+            zmath.cross3(self_normals[2], other_normals[1]),
+            zmath.cross3(self_normals[2], other_normals[2]),
+        };
+
+        inline for (axes) |axis| {
+            const self_corners = [_]f32{
+                zmath.dot3(zmath.rotate(self.rotation, .{ self.bounds.min[0], self.bounds.min[1], self.bounds.min[2], 1.0 }), axis)[0],
+                zmath.dot3(zmath.rotate(self.rotation, .{ self.bounds.max[0], self.bounds.min[1], self.bounds.max[2], 1.0 }), axis)[0],
+                zmath.dot3(zmath.rotate(self.rotation, .{ self.bounds.min[0], self.bounds.min[1], self.bounds.max[2], 1.0 }), axis)[0],
+                zmath.dot3(zmath.rotate(self.rotation, .{ self.bounds.max[0], self.bounds.min[1], self.bounds.min[2], 1.0 }), axis)[0],
+
+                zmath.dot3(zmath.rotate(self.rotation, .{ self.bounds.min[0], self.bounds.max[1], self.bounds.min[2], 1.0 }), axis)[0],
+                zmath.dot3(zmath.rotate(self.rotation, .{ self.bounds.max[0], self.bounds.max[1], self.bounds.max[2], 1.0 }), axis)[0],
+                zmath.dot3(zmath.rotate(self.rotation, .{ self.bounds.min[0], self.bounds.max[1], self.bounds.max[2], 1.0 }), axis)[0],
+                zmath.dot3(zmath.rotate(self.rotation, .{ self.bounds.max[0], self.bounds.max[1], self.bounds.min[2], 1.0 }), axis)[0],
+            };
+
+            const other_corners = [_]f32{
+                zmath.dot3(zmath.rotate(other.rotation, .{ other.bounds.min[0], other.bounds.min[1], other.bounds.min[2], 1.0 }), axis)[0],
+                zmath.dot3(zmath.rotate(other.rotation, .{ other.bounds.max[0], other.bounds.min[1], other.bounds.max[2], 1.0 }), axis)[0],
+                zmath.dot3(zmath.rotate(other.rotation, .{ other.bounds.min[0], other.bounds.min[1], other.bounds.max[2], 1.0 }), axis)[0],
+                zmath.dot3(zmath.rotate(other.rotation, .{ other.bounds.max[0], other.bounds.min[1], other.bounds.min[2], 1.0 }), axis)[0],
+
+                zmath.dot3(zmath.rotate(other.rotation, .{ other.bounds.min[0], other.bounds.max[1], other.bounds.min[2], 1.0 }), axis)[0],
+                zmath.dot3(zmath.rotate(other.rotation, .{ other.bounds.max[0], other.bounds.max[1], other.bounds.max[2], 1.0 }), axis)[0],
+                zmath.dot3(zmath.rotate(other.rotation, .{ other.bounds.min[0], other.bounds.max[1], other.bounds.max[2], 1.0 }), axis)[0],
+                zmath.dot3(zmath.rotate(other.rotation, .{ other.bounds.max[0], other.bounds.max[1], other.bounds.min[2], 1.0 }), axis)[0],
+            };
+
+            var self_highest = std.math.floatMax(f32);
+            var self_lowest = -std.math.floatMax(f32);
+
+            inline for (self_corners) |corner| {
+                if (corner < self_lowest) self_lowest = corner else if (corner > self_highest) self_highest = corner;
+            }
+
+            var other_highest = std.math.floatMax(f32);
+            var other_lowest = -std.math.floatMax(f32);
+
+            inline for (other_corners) |corner| {
+                if (corner < other_lowest) other_lowest = corner else if (corner > other_highest) other_highest = corner;
+            }
+
+            if (!(other_highest > self_lowest and other_lowest < self_highest)) return false;
+        }
+
+        return false;
+    }
+};
+
 // pub fn tetrahedronVertices(point_a: zmath.Vec, point_b: zmath.Vec, point_c: zmath.Vec, point_d: zmath.Vec) [12]gx.Model.Vertex {
 //     const tri_uvs = [_]@Vector(2, f32){
 //         .{ 0.0, 0.0 },
