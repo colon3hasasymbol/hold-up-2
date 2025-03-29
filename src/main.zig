@@ -379,20 +379,16 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     defer text_renderer.deinit();
 
     const characters = [_]gx.TextRenderer.Character{
-        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.0 }, .{ 0.5, 0.5 }) },
-        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
-        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
-        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
-        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
-        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
-        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
-        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
-        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
-        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
-        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
-        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
-        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
-        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.1, 0.1 }) },
+        gx.TextRenderer.Character{ .character = 0, .transform = make_transform_mat(.{ 0.0, 0.0 }, .{ 0.066, 0.1 }) },
+        gx.TextRenderer.Character{ .character = 1, .transform = make_transform_mat(.{ 0.0, 0.1 }, .{ 0.066, 0.1 }) },
+        gx.TextRenderer.Character{ .character = 2, .transform = make_transform_mat(.{ 0.0, 0.2 }, .{ 0.066, 0.1 }) },
+        gx.TextRenderer.Character{ .character = 3, .transform = make_transform_mat(.{ 0.0, 0.3 }, .{ 0.066, 0.1 }) },
+        gx.TextRenderer.Character{ .character = 4, .transform = make_transform_mat(.{ 0.0, 0.4 }, .{ 0.066, 0.1 }) },
+        gx.TextRenderer.Character{ .character = 5, .transform = make_transform_mat(.{ 0.0, 0.5 }, .{ 0.066, 0.1 }) },
+        gx.TextRenderer.Character{ .character = 6, .transform = make_transform_mat(.{ 0.0, 0.6 }, .{ 0.066, 0.1 }) },
+        gx.TextRenderer.Character{ .character = 7, .transform = make_transform_mat(.{ 0.0, 0.7 }, .{ 0.066, 0.1 }) },
+        gx.TextRenderer.Character{ .character = 8, .transform = make_transform_mat(.{ 0.0, 0.8 }, .{ 0.066, 0.1 }) },
+        gx.TextRenderer.Character{ .character = 9, .transform = make_transform_mat(.{ 0.0, 0.9 }, .{ 0.066, 0.1 }) },
     };
 
     text_renderer.print(&characters);

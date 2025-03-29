@@ -157,7 +157,7 @@ pub const Window = struct {
             return error.SDLCreateWindow;
         }
 
-        if (c.SDL_SetWindowOpacity(handle, 0.2) < 0) return error.SDLSetWindowOpacity;
+        // if (c.SDL_SetWindowOpacity(handle, 0.2) < 0) return error.SDLSetWindowOpacity;
 
         return .{
             .handle = handle,
@@ -1705,14 +1705,14 @@ pub const Sampler = struct {
     device: *const LogicalDevice,
     allocation_callbacks: AllocationCallbacks,
 
-    pub fn init(device: *const LogicalDevice, allocation_callbacks: AllocationCallbacks) !@This() {
+    pub fn init(device: *const LogicalDevice, linear: bool, allocation_callbacks: AllocationCallbacks) !@This() {
         const create_info = std.mem.zeroInit(c.VkSamplerCreateInfo, c.VkSamplerCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
             .addressModeU = c.VK_SAMPLER_ADDRESS_MODE_REPEAT,
             .addressModeV = c.VK_SAMPLER_ADDRESS_MODE_REPEAT,
             .addressModeW = c.VK_SAMPLER_ADDRESS_MODE_REPEAT,
-            .magFilter = c.VK_FILTER_LINEAR,
-            .minFilter = c.VK_FILTER_LINEAR,
+            .magFilter = if (linear) c.VK_FILTER_LINEAR else c.VK_FILTER_NEAREST,
+            .minFilter = if (linear) c.VK_FILTER_LINEAR else c.VK_FILTER_NEAREST,
             .anisotropyEnable = c.VK_TRUE,
             .maxAnisotropy = device.physical_device.properties.limits.maxSamplerAnisotropy,
             .borderColor = c.VK_BORDER_COLOR_INT_OPAQUE_BLACK,

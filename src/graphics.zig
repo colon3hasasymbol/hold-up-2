@@ -156,7 +156,7 @@ pub const Texture = struct {
         try normal_image.transitionLayout(vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, vk.c.VK_ACCESS_TRANSFER_WRITE_BIT, vk.c.VK_ACCESS_SHADER_READ_BIT, vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT, vk.c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, command_pool);
         try normal_image.createView(vk.ImageViewType.TYPE_2D, image_create_info.format, .{ .aspectMask = vk.c.VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1 });
 
-        var sampler = try vk.Sampler.init(device, allocation_callbacks);
+        var sampler = try vk.Sampler.init(device, true, allocation_callbacks);
         errdefer sampler.deinit();
 
         const descriptor_sets = try descriptor_pool.allocate(pipeline, descriptor_count, allocator);
@@ -313,7 +313,7 @@ pub const TextRenderer = struct {
         try font_atlas_image.transitionLayout(vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, vk.c.VK_ACCESS_TRANSFER_WRITE_BIT, vk.c.VK_ACCESS_SHADER_READ_BIT, vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT, vk.c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, command_pool);
         try font_atlas_image.createView(vk.ImageViewType.TYPE_2D, image_create_info.format, .{ .aspectMask = vk.c.VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1 });
 
-        var font_atlas_sampler = try vk.Sampler.init(device, allocation_callbacks);
+        var font_atlas_sampler = try vk.Sampler.init(device, false, allocation_callbacks);
         errdefer font_atlas_sampler.deinit();
 
         const descriptor_sets = try descriptor_pool.allocate(&pipeline, descriptor_count, allocator);
