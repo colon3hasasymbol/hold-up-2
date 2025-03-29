@@ -158,7 +158,7 @@ pub const OrientedBox = struct {
             zmath.cross3(self_normals[2], other_normals[2]),
         };
 
-        inline for (axes) |axis| {
+        for (axes) |axis| {
             const self_corners = [_]f32{
                 zmath.dot3(zmath.rotate(self.rotation, .{ self.bounds.min[0], self.bounds.min[1], self.bounds.min[2], 1.0 }), axis)[0],
                 zmath.dot3(zmath.rotate(self.rotation, .{ self.bounds.max[0], self.bounds.min[1], self.bounds.max[2], 1.0 }), axis)[0],
@@ -186,14 +186,14 @@ pub const OrientedBox = struct {
             var self_highest = std.math.floatMax(f32);
             var self_lowest = -std.math.floatMax(f32);
 
-            inline for (self_corners) |corner| {
+            for (self_corners) |corner| {
                 if (corner < self_lowest) self_lowest = corner else if (corner > self_highest) self_highest = corner;
             }
 
             var other_highest = std.math.floatMax(f32);
             var other_lowest = -std.math.floatMax(f32);
 
-            inline for (other_corners) |corner| {
+            for (other_corners) |corner| {
                 if (corner < other_lowest) other_lowest = corner else if (corner > other_highest) other_highest = corner;
             }
 

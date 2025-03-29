@@ -666,10 +666,15 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
         if (keyboard.n) pos1.*[1] -= 0.01;
         if (keyboard.m) pos1.*[1] += 0.01;
 
-        const shape0 = px.Shape{ .box = .{ .bounds = segment0.aabb.? } };
-        const shape1 = px.Shape{ .box = .{ .bounds = segment1.aabb.? } };
+        // const shape0 = px.Shape{ .box = .{ .bounds = segment0.aabb.? } };
+        // const shape1 = px.Shape{ .box = .{ .bounds = segment1.aabb.? } };
 
-        const is_colliding = px.intersect(shape0, segment0.transform.?[0], zmath.quatFromRollPitchYawV(segment0.transform.?[1]), shape1, segment1.transform.?[0], zmath.quatFromRollPitchYawV(segment1.transform.?[1]));
+        // const is_colliding = px.intersect(shape0, segment0.transform.?[0], zmath.quatFromRollPitchYawV(segment0.transform.?[1]), shape1, segment1.transform.?[0], zmath.quatFromRollPitchYawV(segment1.transform.?[1]));
+
+        const obb_a = px.OrientedBox{ .bounds = segment0.aabb.?, .rotation = zmath.quatFromRollPitchYawV(segment0.transform.?[1]) };
+        const obb_b = px.OrientedBox{ .bounds = segment1.aabb.?, .rotation = zmath.quatFromRollPitchYawV(segment1.transform.?[1]) };
+
+        const is_colliding = obb_a.overlapping(obb_b);
 
         if (is_colliding and !old_colliding) std.debug.print("is_colliding: true\n", .{});
         if (!is_colliding and old_colliding) std.debug.print("is_colliding: false\n", .{});
