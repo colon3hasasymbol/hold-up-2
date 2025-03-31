@@ -98,7 +98,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     const command_buffers = try command_pool.allocate(@intCast(swapchain.color_images.len), allocator);
     defer allocator.free(command_buffers);
 
-    const image_descriptor_count = (2 * 2) + (3 * swapchain.color_images.len) + 5;
+    const image_descriptor_count = (3 * 2) + (3 * swapchain.color_images.len) + 5;
     const storage_descriptor_count = 1 * swapchain.color_images.len;
 
     var descriptor_pool = try vk.DescriptorPool.init(
@@ -393,6 +393,13 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
     text_renderer.print(&characters);
 
+    var voxel_renderer = try gx.VoxelRenderer.init(&logical_device, &pipeline1, &descriptor_pool, &command_pool, 1, allocator, null);
+    defer voxel_renderer.deinit();
+
+    voxel_renderer.chunk_data[1][1][1] = .{ .type = .dirt };
+
+    voxel_renderer.meshCube(.{ 1, 1, 1 }, .{ 0.0, 0.0 });
+
     var shape = px.BoundingBox.cube1x1();
     // shape.max[2] = 2.0;
     // shape.min[2] = -2.0;
@@ -595,6 +602,8 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
                 }
             }
         }
+
+        voxel_renderer.recordCommands(&command_buffer, &push_constant_data);
 
         // swapchain.endRenderPass(&command_buffer);
 

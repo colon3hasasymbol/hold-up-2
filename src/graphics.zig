@@ -420,9 +420,9 @@ pub const VoxelRenderer = struct {
     atlas: Texture,
     chunk_data: *[32][32][32]Block,
     chunk_vertex_buffer: vk.Buffer,
-    chunk_vertex_count: u64,
+    chunk_vertex_count: u32,
     chunk_index_buffer: vk.Buffer,
-    chunk_index_count: u64,
+    chunk_index_count: u32,
     allocator: std.mem.Allocator,
     allocation_callbacks: vk.AllocationCallbacks,
 
@@ -468,25 +468,25 @@ pub const VoxelRenderer = struct {
     // pub fn raycast(self: *const @This(), ray_start: @Vector(3, f32), ray_end: @Vector(3, f32)) @Vector(3, u64) {}
 
     pub fn meshSprite(self: *@This(), position: @Vector(3, u64), uv_offset: @Vector(2, f32)) void {
-        const chunk_vertex_array: []Model.Vertex = @as([*]Model.Vertex, self.chunk_vertex_buffer.mapped.?)[self.chunk_vertex_count..CHUNK_VERTEX_BUFFER_COUNT];
-        const chunk_index_array: []u32 = @as([*]u32, self.chunk_index_buffer.mapped.?)[self.chunk_index_count..CHUNK_INDEX_BUFFER_COUNT];
+        const chunk_vertex_array: []Model.Vertex = @as([*]Model.Vertex, @ptrCast(@alignCast(self.chunk_vertex_buffer.mapped.?)))[self.chunk_vertex_count..CHUNK_VERTEX_BUFFER_COUNT];
+        const chunk_index_array: []u32 = @as([*]u32, @ptrCast(@alignCast(self.chunk_index_buffer.mapped.?)))[self.chunk_index_count..CHUNK_INDEX_BUFFER_COUNT];
 
         const quad_uvs = [_]@Vector(2, f32){
-            .{ 0.0, 0.0 } + uv_offset,
-            .{ 1.0, 1.0 } + uv_offset,
-            .{ 0.0, 1.0 } + uv_offset,
-            .{ 1.0, 0.0 } + uv_offset,
+            @Vector(2, f32){ 0.0, 0.0 } + uv_offset,
+            @Vector(2, f32){ 1.0, 1.0 } + uv_offset,
+            @Vector(2, f32){ 0.0, 1.0 } + uv_offset,
+            @Vector(2, f32){ 1.0, 0.0 } + uv_offset,
         };
 
-        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 1.0, 0.0, 1.0 } + position, .uv = quad_uvs[2], .normal = .{ 0.5, 0, 0.5 }, .tangent = .{ 0.0, 0.0, 0.0 } };
-        chunk_vertex_array[1] = Model.Vertex{ .position = .{ 1.0, 1.0, 1.0 } + position, .uv = quad_uvs[1], .normal = .{ 0.5, 0, 0.5 }, .tangent = .{ 0.0, 0.0, 0.0 } };
-        chunk_vertex_array[2] = Model.Vertex{ .position = .{ 0.0, 1.0, 0.0 } + position, .uv = quad_uvs[3], .normal = .{ 0.5, 0, 0.5 }, .tangent = .{ 0.0, 0.0, 0.0 } };
-        chunk_vertex_array[3] = Model.Vertex{ .position = .{ 0.0, 0.0, 0.0 } + position, .uv = quad_uvs[0], .normal = .{ 0.5, 0, 0.5 }, .tangent = .{ 0.0, 0.0, 0.0 } };
+        chunk_vertex_array[0] = Model.Vertex{ .position = @as(@Vector(3, f32), @floatFromInt(position)) + @Vector(3, f32){ 1.0, 0.0, 1.0 }, .uv = quad_uvs[2], .normal = .{ 0.5, 0, 0.5 }, .tangent = .{ 0.0, 0.0, 0.0 } };
+        chunk_vertex_array[1] = Model.Vertex{ .position = @as(@Vector(3, f32), @floatFromInt(position)) + @Vector(3, f32){ 1.0, 1.0, 1.0 }, .uv = quad_uvs[1], .normal = .{ 0.5, 0, 0.5 }, .tangent = .{ 0.0, 0.0, 0.0 } };
+        chunk_vertex_array[2] = Model.Vertex{ .position = @as(@Vector(3, f32), @floatFromInt(position)) + @Vector(3, f32){ 0.0, 1.0, 0.0 }, .uv = quad_uvs[3], .normal = .{ 0.5, 0, 0.5 }, .tangent = .{ 0.0, 0.0, 0.0 } };
+        chunk_vertex_array[3] = Model.Vertex{ .position = @as(@Vector(3, f32), @floatFromInt(position)) + @Vector(3, f32){ 0.0, 0.0, 0.0 }, .uv = quad_uvs[0], .normal = .{ 0.5, 0, 0.5 }, .tangent = .{ 0.0, 0.0, 0.0 } };
 
-        chunk_vertex_array[4] = Model.Vertex{ .position = .{ 1.0, 0.0, 0.0 } + position, .uv = quad_uvs[2], .normal = .{ -0.5, 0, 0.5 }, .tangent = .{ 0.0, 0.0, 0.0 } };
-        chunk_vertex_array[5] = Model.Vertex{ .position = .{ 1.0, 1.0, 0.0 } + position, .uv = quad_uvs[1], .normal = .{ -0.5, 0, 0.5 }, .tangent = .{ 0.0, 0.0, 0.0 } };
-        chunk_vertex_array[6] = Model.Vertex{ .position = .{ 0.0, 1.0, 1.0 } + position, .uv = quad_uvs[3], .normal = .{ -0.5, 0, 0.5 }, .tangent = .{ 0.0, 0.0, 0.0 } };
-        chunk_vertex_array[7] = Model.Vertex{ .position = .{ 0.0, 0.0, 1.0 } + position, .uv = quad_uvs[0], .normal = .{ -0.5, 0, 0.5 }, .tangent = .{ 0.0, 0.0, 0.0 } };
+        chunk_vertex_array[4] = Model.Vertex{ .position = @as(@Vector(3, f32), @floatFromInt(position)) + @Vector(3, f32){ 1.0, 0.0, 0.0 }, .uv = quad_uvs[2], .normal = .{ -0.5, 0, 0.5 }, .tangent = .{ 0.0, 0.0, 0.0 } };
+        chunk_vertex_array[5] = Model.Vertex{ .position = @as(@Vector(3, f32), @floatFromInt(position)) + @Vector(3, f32){ 1.0, 1.0, 0.0 }, .uv = quad_uvs[1], .normal = .{ -0.5, 0, 0.5 }, .tangent = .{ 0.0, 0.0, 0.0 } };
+        chunk_vertex_array[6] = Model.Vertex{ .position = @as(@Vector(3, f32), @floatFromInt(position)) + @Vector(3, f32){ 0.0, 1.0, 1.0 }, .uv = quad_uvs[3], .normal = .{ -0.5, 0, 0.5 }, .tangent = .{ 0.0, 0.0, 0.0 } };
+        chunk_vertex_array[7] = Model.Vertex{ .position = @as(@Vector(3, f32), @floatFromInt(position)) + @Vector(3, f32){ 0.0, 0.0, 1.0 }, .uv = quad_uvs[0], .normal = .{ -0.5, 0, 0.5 }, .tangent = .{ 0.0, 0.0, 0.0 } };
 
         chunk_index_array[0] = 0 + self.chunk_index_count;
         chunk_index_array[1] = 1 + self.chunk_index_count;
@@ -507,14 +507,14 @@ pub const VoxelRenderer = struct {
     }
 
     pub fn meshCube(self: *@This(), position: @Vector(3, u64), uv_offset: @Vector(2, f32)) void {
-        const chunk_vertex_array: []Model.Vertex = @as([*]Model.Vertex, self.chunk_vertex_buffer.mapped.?)[self.chunk_vertex_count..CHUNK_VERTEX_BUFFER_COUNT];
-        const chunk_index_array: []u32 = @as([*]u32, self.chunk_index_buffer.mapped.?)[self.chunk_index_count..CHUNK_INDEX_BUFFER_COUNT];
+        const chunk_vertex_array: []Model.Vertex = @as([*]Model.Vertex, @ptrCast(@alignCast(self.chunk_vertex_buffer.mapped.?)))[self.chunk_vertex_count..CHUNK_VERTEX_BUFFER_COUNT];
+        const chunk_index_array: []u32 = @as([*]u32, @ptrCast(@alignCast(self.chunk_index_buffer.mapped.?)))[self.chunk_index_count..CHUNK_INDEX_BUFFER_COUNT];
 
         const quad_uvs = [_]@Vector(2, f32){
-            .{ 0.0, 0.0 } + uv_offset,
-            .{ 1.0, 1.0 } + uv_offset,
-            .{ 0.0, 1.0 } + uv_offset,
-            .{ 1.0, 0.0 } + uv_offset,
+            uv_offset + @Vector(2, f32){ 0.0, 0.0 },
+            uv_offset + @Vector(2, f32){ 1.0, 1.0 },
+            uv_offset + @Vector(2, f32){ 0.0, 1.0 },
+            uv_offset + @Vector(2, f32){ 1.0, 0.0 },
         };
 
         const normals = [_]@Vector(3, f16){
@@ -535,35 +535,35 @@ pub const VoxelRenderer = struct {
             .{ 0.0, 1.0, 1.0 },
         };
 
-        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 0.0, 0.0, 0.0 } + position, .uv = quad_uvs[0], .normal = normals[0], .tangent = tangents[0] };
-        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 0.0, 1.0, 1.0 } + position, .uv = quad_uvs[1], .normal = normals[0], .tangent = tangents[0] };
-        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 0.0, 1.0, 0.0 } + position, .uv = quad_uvs[3], .normal = normals[0], .tangent = tangents[0] };
-        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 0.0, 0.0, 1.0 } + position, .uv = quad_uvs[2], .normal = normals[0], .tangent = tangents[0] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = @Vector(3, f32){ 0.0, 0.0, 0.0 } + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[0], .normal = normals[0], .tangent = tangents[0] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = @Vector(3, f32){ 0.0, 1.0, 1.0 } + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[1], .normal = normals[0], .tangent = tangents[0] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = @Vector(3, f32){ 0.0, 1.0, 0.0 } + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[3], .normal = normals[0], .tangent = tangents[0] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = @Vector(3, f32){ 0.0, 0.0, 1.0 } + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[2], .normal = normals[0], .tangent = tangents[0] };
 
-        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 1.0, 0.0, 0.0 } + position, .uv = quad_uvs[0], .normal = normals[1], .tangent = tangents[1] };
-        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 1.0, 1.0, 1.0 } + position, .uv = quad_uvs[1], .normal = normals[1], .tangent = tangents[1] };
-        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 1.0, 0.0, 1.0 } + position, .uv = quad_uvs[2], .normal = normals[1], .tangent = tangents[1] };
-        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 1.0, 1.0, 0.0 } + position, .uv = quad_uvs[3], .normal = normals[1], .tangent = tangents[1] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = @Vector(3, f32){ 1.0, 0.0, 0.0 } + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[0], .normal = normals[1], .tangent = tangents[1] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = @Vector(3, f32){ 1.0, 1.0, 1.0 } + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[1], .normal = normals[1], .tangent = tangents[1] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = @Vector(3, f32){ 1.0, 0.0, 1.0 } + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[2], .normal = normals[1], .tangent = tangents[1] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = @Vector(3, f32){ 1.0, 1.0, 0.0 } + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[3], .normal = normals[1], .tangent = tangents[1] };
 
-        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 0.0, 0.0, 0.0 } + position, .uv = quad_uvs[0], .normal = normals[2], .tangent = tangents[2] };
-        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 1.0, 0.0, 1.0 } + position, .uv = quad_uvs[1], .normal = normals[2], .tangent = tangents[2] };
-        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 0.0, 0.0, 1.0 } + position, .uv = quad_uvs[2], .normal = normals[2], .tangent = tangents[2] };
-        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 1.0, 0.0, 0.0 } + position, .uv = quad_uvs[3], .normal = normals[2], .tangent = tangents[2] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = @Vector(3, f32){ 0.0, 0.0, 0.0 } + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[0], .normal = normals[2], .tangent = tangents[2] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = @Vector(3, f32){ 1.0, 0.0, 1.0 } + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[1], .normal = normals[2], .tangent = tangents[2] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = @Vector(3, f32){ 0.0, 0.0, 1.0 } + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[2], .normal = normals[2], .tangent = tangents[2] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = @Vector(3, f32){ 1.0, 0.0, 0.0 } + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[3], .normal = normals[2], .tangent = tangents[2] };
 
-        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 0.0, 1.0, 0.0 } + position, .uv = quad_uvs[0], .normal = normals[3], .tangent = tangents[3] };
-        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 1.0, 1.0, 1.0 } + position, .uv = quad_uvs[1], .normal = normals[3], .tangent = tangents[3] };
-        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 0.0, 1.0, 1.0 } + position, .uv = quad_uvs[2], .normal = normals[3], .tangent = tangents[3] };
-        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 1.0, 1.0, 0.0 } + position, .uv = quad_uvs[3], .normal = normals[3], .tangent = tangents[3] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = @Vector(3, f32){ 0.0, 1.0, 0.0 } + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[0], .normal = normals[3], .tangent = tangents[3] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = @Vector(3, f32){ 1.0, 1.0, 1.0 } + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[1], .normal = normals[3], .tangent = tangents[3] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = @Vector(3, f32){ 0.0, 1.0, 1.0 } + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[2], .normal = normals[3], .tangent = tangents[3] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = @Vector(3, f32){ 1.0, 1.0, 0.0 } + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[3], .normal = normals[3], .tangent = tangents[3] };
 
-        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 0.0, 0.0, 1.0 } + position, .uv = quad_uvs[0], .normal = normals[4], .tangent = tangents[4] };
-        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 1.0, 1.0, 1.0 } + position, .uv = quad_uvs[1], .normal = normals[4], .tangent = tangents[4] };
-        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 0.0, 1.0, 1.0 } + position, .uv = quad_uvs[2], .normal = normals[4], .tangent = tangents[4] };
-        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 1.0, 0.0, 1.0 } + position, .uv = quad_uvs[3], .normal = normals[4], .tangent = tangents[4] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = @Vector(3, f32){ 0.0, 0.0, 1.0 } + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[0], .normal = normals[4], .tangent = tangents[4] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = @Vector(3, f32){ 1.0, 1.0, 1.0 } + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[1], .normal = normals[4], .tangent = tangents[4] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = @Vector(3, f32){ 0.0, 1.0, 1.0 } + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[2], .normal = normals[4], .tangent = tangents[4] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = @Vector(3, f32){ 1.0, 0.0, 1.0 } + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[3], .normal = normals[4], .tangent = tangents[4] };
 
-        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 0.0, 0.0, 0.0 } + position, .uv = quad_uvs[0], .normal = normals[5], .tangent = tangents[5] };
-        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 1.0, 1.0, 0.0 } + position, .uv = quad_uvs[1], .normal = normals[5], .tangent = tangents[5] };
-        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 0.0, 1.0, 0.0 } + position, .uv = quad_uvs[2], .normal = normals[5], .tangent = tangents[5] };
-        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 1.0, 0.0, 0.0 } + position, .uv = quad_uvs[3], .normal = normals[5], .tangent = tangents[5] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = @Vector(3, f32){ 0.0, 0.0, 0.0 } + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[0], .normal = normals[5], .tangent = tangents[5] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = @Vector(3, f32){ 1.0, 1.0, 0.0 } + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[1], .normal = normals[5], .tangent = tangents[5] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = @Vector(3, f32){ 0.0, 1.0, 0.0 } + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[2], .normal = normals[5], .tangent = tangents[5] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = @Vector(3, f32){ 1.0, 0.0, 0.0 } + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[3], .normal = normals[5], .tangent = tangents[5] };
 
         chunk_index_array[0] = 0 + self.chunk_index_count;
         chunk_index_array[1] = 1 + self.chunk_index_count;
