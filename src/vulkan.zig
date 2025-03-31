@@ -157,7 +157,7 @@ pub const Window = struct {
             return error.SDLCreateWindow;
         }
 
-        // if (c.SDL_SetWindowOpacity(handle, 0.2) < 0) return error.SDLSetWindowOpacity;
+        if (c.SDL_SetWindowOpacity(handle, 0.2) < 0) return error.SDLSetWindowOpacity;
 
         return .{
             .handle = handle,

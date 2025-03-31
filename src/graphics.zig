@@ -1,6 +1,7 @@
 // Copyright 2025-Present Felix Sapora. All rights reserved.
 
 const std = @import("std");
+const zmath = @import("zmath");
 
 const stbi = @cImport({
     @cInclude("stb_image.h");
@@ -70,10 +71,12 @@ pub const Model = struct {
         const index_buffer_size: u64 = @sizeOf(u32) * index_count;
 
         var vertex_buffer = try vk.Buffer.init(device, vertex_buffer_size, vk.BufferUsage.VERTEX_BUFFER_BIT, allocation_callbacks);
+        errdefer vertex_buffer.deinit();
         try vertex_buffer.createMemory(vk.MemoryProperty.HOST_VISIBLE_BIT | vk.MemoryProperty.HOST_COHERENT_BIT);
         try vertex_buffer.uploadData(vertices);
 
         var index_buffer = try vk.Buffer.init(device, index_buffer_size, vk.BufferUsage.INDEX_BUFFER_BIT, allocation_callbacks);
+        errdefer index_buffer.deinit();
         try index_buffer.createMemory(vk.MemoryProperty.HOST_VISIBLE_BIT | vk.MemoryProperty.HOST_COHERENT_BIT);
         try index_buffer.uploadData(indices);
 
@@ -390,5 +393,254 @@ pub const TextRenderer = struct {
         self.pipeline.bind(command_buffer);
         self.device.dispatch.CmdBindDescriptorSets(command_buffer.handle, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline.layout, 0, 1, &self.descriptor_sets[image_index], 0, null);
         self.device.dispatch.CmdDraw(command_buffer.handle, 6, self.character_count, 0, 0);
+    }
+};
+
+pub const VoxelRenderer = struct {
+    pub const Block = struct {
+        pub const Type = enum(u64) {
+            air,
+            dirt,
+            stone,
+            grass_block,
+            grass,
+        };
+
+        type: Type,
+    };
+
+    pub const CHUNK_VERTEX_BUFFER_COUNT: u64 = (32 * 32 * 32) * (6 * 4);
+    pub const CHUNK_INDEX_BUFFER_COUNT: u64 = (32 * 32 * 32) * (6 * 6);
+
+    pub const CHUNK_VERTEX_BUFFER_SIZE = CHUNK_VERTEX_BUFFER_COUNT * @sizeOf(Model.Vertex);
+    pub const CHUNK_INDEX_BUFFER_SIZE = CHUNK_INDEX_BUFFER_COUNT * @sizeOf(u32);
+
+    device: *const vk.LogicalDevice,
+    pipeline: *vk.Pipeline,
+    atlas: Texture,
+    chunk_data: *[32][32][32]Block,
+    chunk_vertex_buffer: vk.Buffer,
+    chunk_vertex_count: u64,
+    chunk_index_buffer: vk.Buffer,
+    chunk_index_count: u64,
+    allocator: std.mem.Allocator,
+    allocation_callbacks: vk.AllocationCallbacks,
+
+    pub fn init(device: *const vk.LogicalDevice, pipeline: *vk.Pipeline, descriptor_pool: *vk.DescriptorPool, command_pool: *vk.CommandPool, descriptor_count: u32, allocator: std.mem.Allocator, allocation_callbacks: vk.AllocationCallbacks) !@This() {
+        var atlas = try Texture.init(device, command_pool, pipeline, descriptor_pool, descriptor_count, "textures/the f word :3.png", allocator, null);
+        errdefer atlas.deinit();
+
+        const chunk_data = try allocator.create([32][32][32]Block);
+        chunk_data.* = std.mem.zeroes([32][32][32]Block);
+        errdefer allocator.destroy(chunk_data);
+
+        var chunk_vertex_buffer = try vk.Buffer.init(device, CHUNK_VERTEX_BUFFER_SIZE, vk.BufferUsage.VERTEX_BUFFER_BIT, allocation_callbacks);
+        errdefer chunk_vertex_buffer.deinit();
+        try chunk_vertex_buffer.createMemory(vk.MemoryProperty.HOST_VISIBLE_BIT | vk.MemoryProperty.HOST_COHERENT_BIT);
+        _ = try chunk_vertex_buffer.map();
+
+        var chunk_index_buffer = try vk.Buffer.init(device, CHUNK_INDEX_BUFFER_SIZE, vk.BufferUsage.INDEX_BUFFER_BIT, allocation_callbacks);
+        errdefer chunk_index_buffer.deinit();
+        try chunk_index_buffer.createMemory(vk.MemoryProperty.HOST_VISIBLE_BIT | vk.MemoryProperty.HOST_COHERENT_BIT);
+        _ = try chunk_index_buffer.map();
+
+        return .{
+            .device = device,
+            .pipeline = pipeline,
+            .atlas = atlas,
+            .chunk_data = chunk_data,
+            .chunk_vertex_buffer = chunk_vertex_buffer,
+            .chunk_vertex_count = 0,
+            .chunk_index_buffer = chunk_index_buffer,
+            .chunk_index_count = 0,
+            .allocator = allocator,
+            .allocation_callbacks = allocation_callbacks,
+        };
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.chunk_index_buffer.deinit();
+        self.chunk_vertex_buffer.deinit();
+        self.allocator.destroy(self.chunk_data);
+        self.atlas.deinit();
+    }
+
+    // pub fn raycast(self: *const @This(), ray_start: @Vector(3, f32), ray_end: @Vector(3, f32)) @Vector(3, u64) {}
+
+    pub fn meshSprite(self: *@This(), position: @Vector(3, u64), uv_offset: @Vector(2, f32)) void {
+        const chunk_vertex_array: []Model.Vertex = @as([*]Model.Vertex, self.chunk_vertex_buffer.mapped.?)[self.chunk_vertex_count..CHUNK_VERTEX_BUFFER_COUNT];
+        const chunk_index_array: []u32 = @as([*]u32, self.chunk_index_buffer.mapped.?)[self.chunk_index_count..CHUNK_INDEX_BUFFER_COUNT];
+
+        const quad_uvs = [_]@Vector(2, f32){
+            .{ 0.0, 0.0 } + uv_offset,
+            .{ 1.0, 1.0 } + uv_offset,
+            .{ 0.0, 1.0 } + uv_offset,
+            .{ 1.0, 0.0 } + uv_offset,
+        };
+
+        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 1.0, 0.0, 1.0 } + position, .uv = quad_uvs[2], .normal = .{ 0.5, 0, 0.5 }, .tangent = .{ 0.0, 0.0, 0.0 } };
+        chunk_vertex_array[1] = Model.Vertex{ .position = .{ 1.0, 1.0, 1.0 } + position, .uv = quad_uvs[1], .normal = .{ 0.5, 0, 0.5 }, .tangent = .{ 0.0, 0.0, 0.0 } };
+        chunk_vertex_array[2] = Model.Vertex{ .position = .{ 0.0, 1.0, 0.0 } + position, .uv = quad_uvs[3], .normal = .{ 0.5, 0, 0.5 }, .tangent = .{ 0.0, 0.0, 0.0 } };
+        chunk_vertex_array[3] = Model.Vertex{ .position = .{ 0.0, 0.0, 0.0 } + position, .uv = quad_uvs[0], .normal = .{ 0.5, 0, 0.5 }, .tangent = .{ 0.0, 0.0, 0.0 } };
+
+        chunk_vertex_array[4] = Model.Vertex{ .position = .{ 1.0, 0.0, 0.0 } + position, .uv = quad_uvs[2], .normal = .{ -0.5, 0, 0.5 }, .tangent = .{ 0.0, 0.0, 0.0 } };
+        chunk_vertex_array[5] = Model.Vertex{ .position = .{ 1.0, 1.0, 0.0 } + position, .uv = quad_uvs[1], .normal = .{ -0.5, 0, 0.5 }, .tangent = .{ 0.0, 0.0, 0.0 } };
+        chunk_vertex_array[6] = Model.Vertex{ .position = .{ 0.0, 1.0, 1.0 } + position, .uv = quad_uvs[3], .normal = .{ -0.5, 0, 0.5 }, .tangent = .{ 0.0, 0.0, 0.0 } };
+        chunk_vertex_array[7] = Model.Vertex{ .position = .{ 0.0, 0.0, 1.0 } + position, .uv = quad_uvs[0], .normal = .{ -0.5, 0, 0.5 }, .tangent = .{ 0.0, 0.0, 0.0 } };
+
+        chunk_index_array[0] = 0 + self.chunk_index_count;
+        chunk_index_array[1] = 1 + self.chunk_index_count;
+        chunk_index_array[2] = 2 + self.chunk_index_count;
+        chunk_index_array[3] = 0 + self.chunk_index_count;
+        chunk_index_array[4] = 3 + self.chunk_index_count;
+        chunk_index_array[5] = 1 + self.chunk_index_count;
+
+        chunk_index_array[6] = 4 + self.chunk_index_count;
+        chunk_index_array[7] = 5 + self.chunk_index_count;
+        chunk_index_array[8] = 6 + self.chunk_index_count;
+        chunk_index_array[9] = 4 + self.chunk_index_count;
+        chunk_index_array[10] = 7 + self.chunk_index_count;
+        chunk_index_array[11] = 5 + self.chunk_index_count;
+
+        self.chunk_vertex_count += 8;
+        self.chunk_index_count += 12;
+    }
+
+    pub fn meshCube(self: *@This(), position: @Vector(3, u64), uv_offset: @Vector(2, f32)) void {
+        const chunk_vertex_array: []Model.Vertex = @as([*]Model.Vertex, self.chunk_vertex_buffer.mapped.?)[self.chunk_vertex_count..CHUNK_VERTEX_BUFFER_COUNT];
+        const chunk_index_array: []u32 = @as([*]u32, self.chunk_index_buffer.mapped.?)[self.chunk_index_count..CHUNK_INDEX_BUFFER_COUNT];
+
+        const quad_uvs = [_]@Vector(2, f32){
+            .{ 0.0, 0.0 } + uv_offset,
+            .{ 1.0, 1.0 } + uv_offset,
+            .{ 0.0, 1.0 } + uv_offset,
+            .{ 1.0, 0.0 } + uv_offset,
+        };
+
+        const normals = [_]@Vector(3, f16){
+            .{ -1.0, 0.0, 0.0 },
+            .{ 1.0, 0.0, 0.0 },
+            .{ 0.0, -1.0, 0.0 },
+            .{ 0.0, 1.0, 0.0 },
+            .{ 0.0, 0.0, 1.0 },
+            .{ 0.0, 0.0, -1.0 },
+        };
+
+        const tangents = [_]@Vector(3, f16){
+            .{ 0.0, 0.0, 1.0 },
+            .{ 0.0, 1.0, 1.0 },
+            .{ 0.0, 1.0, 1.0 },
+            .{ 0.0, 1.0, 1.0 },
+            .{ 0.0, 1.0, 1.0 },
+            .{ 0.0, 1.0, 1.0 },
+        };
+
+        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 0.0, 0.0, 0.0 } + position, .uv = quad_uvs[0], .normal = normals[0], .tangent = tangents[0] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 0.0, 1.0, 1.0 } + position, .uv = quad_uvs[1], .normal = normals[0], .tangent = tangents[0] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 0.0, 1.0, 0.0 } + position, .uv = quad_uvs[3], .normal = normals[0], .tangent = tangents[0] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 0.0, 0.0, 1.0 } + position, .uv = quad_uvs[2], .normal = normals[0], .tangent = tangents[0] };
+
+        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 1.0, 0.0, 0.0 } + position, .uv = quad_uvs[0], .normal = normals[1], .tangent = tangents[1] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 1.0, 1.0, 1.0 } + position, .uv = quad_uvs[1], .normal = normals[1], .tangent = tangents[1] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 1.0, 0.0, 1.0 } + position, .uv = quad_uvs[2], .normal = normals[1], .tangent = tangents[1] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 1.0, 1.0, 0.0 } + position, .uv = quad_uvs[3], .normal = normals[1], .tangent = tangents[1] };
+
+        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 0.0, 0.0, 0.0 } + position, .uv = quad_uvs[0], .normal = normals[2], .tangent = tangents[2] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 1.0, 0.0, 1.0 } + position, .uv = quad_uvs[1], .normal = normals[2], .tangent = tangents[2] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 0.0, 0.0, 1.0 } + position, .uv = quad_uvs[2], .normal = normals[2], .tangent = tangents[2] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 1.0, 0.0, 0.0 } + position, .uv = quad_uvs[3], .normal = normals[2], .tangent = tangents[2] };
+
+        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 0.0, 1.0, 0.0 } + position, .uv = quad_uvs[0], .normal = normals[3], .tangent = tangents[3] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 1.0, 1.0, 1.0 } + position, .uv = quad_uvs[1], .normal = normals[3], .tangent = tangents[3] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 0.0, 1.0, 1.0 } + position, .uv = quad_uvs[2], .normal = normals[3], .tangent = tangents[3] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 1.0, 1.0, 0.0 } + position, .uv = quad_uvs[3], .normal = normals[3], .tangent = tangents[3] };
+
+        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 0.0, 0.0, 1.0 } + position, .uv = quad_uvs[0], .normal = normals[4], .tangent = tangents[4] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 1.0, 1.0, 1.0 } + position, .uv = quad_uvs[1], .normal = normals[4], .tangent = tangents[4] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 0.0, 1.0, 1.0 } + position, .uv = quad_uvs[2], .normal = normals[4], .tangent = tangents[4] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 1.0, 0.0, 1.0 } + position, .uv = quad_uvs[3], .normal = normals[4], .tangent = tangents[4] };
+
+        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 0.0, 0.0, 0.0 } + position, .uv = quad_uvs[0], .normal = normals[5], .tangent = tangents[5] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 1.0, 1.0, 0.0 } + position, .uv = quad_uvs[1], .normal = normals[5], .tangent = tangents[5] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 0.0, 1.0, 0.0 } + position, .uv = quad_uvs[2], .normal = normals[5], .tangent = tangents[5] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = .{ 1.0, 0.0, 0.0 } + position, .uv = quad_uvs[3], .normal = normals[5], .tangent = tangents[5] };
+
+        chunk_index_array[0] = 0 + self.chunk_index_count;
+        chunk_index_array[1] = 1 + self.chunk_index_count;
+        chunk_index_array[2] = 2 + self.chunk_index_count;
+        chunk_index_array[3] = 0 + self.chunk_index_count;
+        chunk_index_array[4] = 3 + self.chunk_index_count;
+        chunk_index_array[5] = 1 + self.chunk_index_count;
+
+        chunk_index_array[6] = 4 + self.chunk_index_count;
+        chunk_index_array[7] = 5 + self.chunk_index_count;
+        chunk_index_array[8] = 6 + self.chunk_index_count;
+        chunk_index_array[9] = 4 + self.chunk_index_count;
+        chunk_index_array[10] = 7 + self.chunk_index_count;
+        chunk_index_array[11] = 5 + self.chunk_index_count;
+
+        chunk_index_array[12] = 8 + self.chunk_index_count;
+        chunk_index_array[13] = 9 + self.chunk_index_count;
+        chunk_index_array[14] = 10 + self.chunk_index_count;
+        chunk_index_array[15] = 8 + self.chunk_index_count;
+        chunk_index_array[16] = 11 + self.chunk_index_count;
+        chunk_index_array[17] = 9 + self.chunk_index_count;
+
+        chunk_index_array[18] = 12 + self.chunk_index_count;
+        chunk_index_array[19] = 13 + self.chunk_index_count;
+        chunk_index_array[20] = 14 + self.chunk_index_count;
+        chunk_index_array[21] = 12 + self.chunk_index_count;
+        chunk_index_array[22] = 15 + self.chunk_index_count;
+        chunk_index_array[23] = 13 + self.chunk_index_count;
+
+        chunk_index_array[24] = 16 + self.chunk_index_count;
+        chunk_index_array[25] = 17 + self.chunk_index_count;
+        chunk_index_array[26] = 18 + self.chunk_index_count;
+        chunk_index_array[27] = 16 + self.chunk_index_count;
+        chunk_index_array[28] = 19 + self.chunk_index_count;
+        chunk_index_array[29] = 17 + self.chunk_index_count;
+
+        chunk_index_array[30] = 20 + self.chunk_index_count;
+        chunk_index_array[31] = 21 + self.chunk_index_count;
+        chunk_index_array[32] = 22 + self.chunk_index_count;
+        chunk_index_array[33] = 20 + self.chunk_index_count;
+        chunk_index_array[34] = 23 + self.chunk_index_count;
+        chunk_index_array[35] = 21 + self.chunk_index_count;
+
+        self.chunk_vertex_count += 24;
+        self.chunk_index_count += 36;
+    }
+
+    pub fn meshChunk(self: *@This()) void {
+        for (0..32) |x| {
+            for (0..32) |y| {
+                for (0..32) |z| {
+                    const block = self.chunk_data[x][y][z];
+
+                    switch (block.type) {
+                        .air => {},
+                        .dirt => self.meshCube(.{ x, y, z }, .{ 0.0, 0.0 }),
+                        .stone => self.meshCube(.{ x, y, z }, .{ 0.1, 0.0 }),
+                        .grass_block => self.meshCube(.{ x, y, z }, .{ 0.2, 0.0 }),
+                        .grass => self.meshSprite(.{ x, y, z }, .{ 0.3, 0.0 }),
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn clearMesh(self: *@This()) void {
+        self.chunk_vertex_count = 0;
+        self.chunk_index_count = 0;
+    }
+
+    pub fn recordCommands(self: *const @This(), command_buffer: *vk.CommandBuffer, push_constant_data: anytype) void {
+        push_constant_data.object = zmath.identity();
+        self.pipeline.bind(command_buffer);
+        self.device.dispatch.CmdBindDescriptorSets(command_buffer.handle, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline.layout, 0, 1, &self.atlas.descriptor_sets[0], 0, null);
+        command_buffer.pushConstants(self.pipeline.layout, vk.ShaderStage.VERTEX_BIT, push_constant_data);
+        self.device.dispatch.CmdBindVertexBuffers(command_buffer.handle, 0, 1, &self.chunk_vertex_buffer.handle, &[_]u64{0});
+        self.device.dispatch.CmdBindIndexBuffer(command_buffer.handle, self.chunk_index_buffer.handle, 0, vk.c.VK_INDEX_TYPE_UINT32);
+        self.device.dispatch.CmdDrawIndexed(command_buffer.handle, self.chunk_index_count, 1, 0, 0, 0);
     }
 };

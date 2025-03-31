@@ -31,10 +31,10 @@ const vec2 vertex_positions[] = {
 
 const vec2 vertex_uv_map[] = {
         vec2(0.0, 0.0),
-        vec2(0.01075268817, 0.0),
+        vec2(0.0106382979, 0.0),
         vec2(0.0, 1.0),
-        vec2(0.01075268817, 1.0),
-        vec2(0.01075268817, 0.0),
+        vec2(0.0106382979, 1.0),
+        vec2(0.0106382979, 0.0),
         vec2(0.0, 1.0),
     };
 
@@ -42,7 +42,7 @@ void main() {
     Character character = characters.characters[gl_InstanceIndex];
 
     vec2 uv = vertex_uv_map[gl_VertexIndex];
-    float uv_offset = 0.01075268817 * character.character;
+    float uv_offset = 0.0106382979 * character.character;
 
     frag_uv = vec2(uv.x + uv_offset, uv.y);
     gl_Position = vec4((character.transform * vec3(vertex_positions[gl_VertexIndex], 1.0)).xy, 0.5, 1.0);
