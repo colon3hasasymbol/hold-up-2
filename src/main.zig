@@ -396,9 +396,13 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     var voxel_renderer = try gx.VoxelRenderer.init(&logical_device, &pipeline1, &descriptor_pool, &command_pool, 1, allocator, null);
     defer voxel_renderer.deinit();
 
+    voxel_renderer.chunk_data[0][0][0] = .{ .type = .dirt };
     voxel_renderer.chunk_data[1][1][1] = .{ .type = .dirt };
+    voxel_renderer.chunk_data[2][2][2] = .{ .type = .dirt };
+    voxel_renderer.chunk_data[3][3][3] = .{ .type = .grass };
 
-    voxel_renderer.meshCube(.{ 1, 1, 1 }, .{ 0.0, 0.0 });
+    // voxel_renderer.meshCube(.{ 0, 0, 0 }, .{ 0.0, 0.0 });
+    voxel_renderer.meshChunk();
 
     var shape = px.BoundingBox.cube1x1();
     // shape.max[2] = 2.0;
@@ -409,7 +413,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     var triangle_model = try gx.Model.init(&logical_device, &vertices, &indices, null);
     defer triangle_model.deinit();
 
-    try game_world.spawn(.{ .transform = .{ .{ 0.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .texture = &texture1, .pipeline = &pipeline1, .aabb = shape }, "segment1");
+    try game_world.spawn(.{ .transform = .{ .{ -2.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .texture = &texture1, .pipeline = &pipeline1, .aabb = shape }, "segment1");
     try game_world.spawn(.{ .transform = .{ .{ 2.0, 0.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .texture = &texture2, .pipeline = &pipeline2, .aabb = shape }, "segment0");
     // try game_world.spawn(.{ .transform = .{ .{ 0.0, 8.0, 0.0, 0.0 }, .{ 0.0, 0.0, 0.0, 0.0 } }, .model = &triangle_model, .aabb = shape }, "segment2");
 
