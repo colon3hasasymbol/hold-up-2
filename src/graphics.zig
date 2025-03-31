@@ -397,6 +397,28 @@ pub const TextRenderer = struct {
 };
 
 pub const VoxelRenderer = struct {
+    pub const Direction = enum(u3) {
+        north,
+        south,
+        up,
+        down,
+        east,
+        west,
+
+        pub inline fn toVector(self: @This()) @Vector(3, u64) {
+            const map = [_]@Vector(3, u64){
+                .{ -1, 0, 0 },
+                .{ 1, 0, 0 },
+                .{ 0, -1, 0 },
+                .{ 0, 1, 0 },
+                .{ 0, 0, -1 },
+                .{ 0, 0, 1 },
+            };
+
+            return map[self];
+        }
+    };
+
     pub const Block = struct {
         pub const Type = enum(u64) {
             air,
@@ -407,6 +429,18 @@ pub const VoxelRenderer = struct {
         };
 
         type: Type,
+
+        pub inline fn isSolid(self: @This()) bool {
+            const map = [_]bool{
+                false,
+                true,
+                true,
+                true,
+                false,
+            };
+
+            return map[@intFromEnum(self.type)];
+        }
     };
 
     pub const CHUNK_VERTEX_BUFFER_COUNT: u64 = (32 * 32 * 32) * (6 * 4);
@@ -465,9 +499,109 @@ pub const VoxelRenderer = struct {
         self.atlas.deinit();
     }
 
+    pub inline fn getBlock(self: @This(), position: @Vector(3, u64)) Block {
+        return self.chunk_data[position[0]][position[1]][position[2]];
+    }
+
     // pub fn raycast(self: *const @This(), ray_start: @Vector(3, f32), ray_end: @Vector(3, f32)) @Vector(3, u64) {}
 
+    pub fn meshFace(self: *@This(), position: @Vector(3, u64), direction: Direction, uv_offset: @Vector(2, f32)) void {
+        if (self.getBlock(position + direction.toVector()).isSolid()) return;
+
+        const chunk_vertex_array: []Model.Vertex = @as([*]Model.Vertex, @ptrCast(@alignCast(self.chunk_vertex_buffer.mapped.?)))[self.chunk_vertex_count..CHUNK_VERTEX_BUFFER_COUNT];
+        const chunk_index_array: []u32 = @as([*]u32, @ptrCast(@alignCast(self.chunk_index_buffer.mapped.?)))[self.chunk_index_count..CHUNK_INDEX_BUFFER_COUNT];
+
+        const quad_uvs = [_]@Vector(2, f32){
+            uv_offset + @Vector(2, f32){ 0.0, 0.0 },
+            uv_offset + @Vector(2, f32){ 1.0, 1.0 },
+            uv_offset + @Vector(2, f32){ 0.0, 1.0 },
+            uv_offset + @Vector(2, f32){ 1.0, 0.0 },
+        };
+
+        const normals = [_]@Vector(3, f16){
+            .{ -1.0, 0.0, 0.0 },
+            .{ 1.0, 0.0, 0.0 },
+            .{ 0.0, -1.0, 0.0 },
+            .{ 0.0, 1.0, 0.0 },
+            .{ 0.0, 0.0, -1.0 },
+            .{ 0.0, 0.0, 1.0 },
+        };
+
+        const tangents = [_]@Vector(3, f16){
+            .{ 0.0, 0.0, 1.0 },
+            .{ 0.0, 1.0, 1.0 },
+            .{ 0.0, 1.0, 1.0 },
+            .{ 0.0, 1.0, 1.0 },
+            .{ 0.0, 1.0, 1.0 },
+            .{ 0.0, 1.0, 1.0 },
+        };
+
+        const positions_per_direction = [_][4]@Vector(3, f32){
+            [_]@Vector(3, f32){
+                .{ 0.0, 0.0, 0.0 },
+                .{ 0.0, 1.0, 1.0 },
+                .{ 0.0, 1.0, 0.0 },
+                .{ 0.0, 0.0, 1.0 },
+            },
+            [_]@Vector(3, f32){
+                .{ 1.0, 0.0, 0.0 },
+                .{ 1.0, 1.0, 1.0 },
+                .{ 1.0, 0.0, 1.0 },
+                .{ 1.0, 1.0, 0.0 },
+            },
+            [_]@Vector(3, f32){
+                .{ 1.0, 0.0, 1.0 },
+                .{ 0.0, 0.0, 0.0 },
+                .{ 0.0, 0.0, 1.0 },
+                .{ 1.0, 0.0, 0.0 },
+            },
+            [_]@Vector(3, f32){
+                .{ 0.0, 1.0, 0.0 },
+                .{ 1.0, 1.0, 1.0 },
+                .{ 0.0, 1.0, 1.0 },
+                .{ 1.0, 1.0, 0.0 },
+            },
+            [_]@Vector(3, f32){
+                .{ 0.0, 0.0, 0.0 },
+                .{ 1.0, 1.0, 0.0 },
+                .{ 0.0, 1.0, 0.0 },
+                .{ 1.0, 0.0, 0.0 },
+            },
+            [_]@Vector(3, f32){
+                .{ 0.0, 0.0, 1.0 },
+                .{ 1.0, 1.0, 1.0 },
+                .{ 0.0, 1.0, 1.0 },
+                .{ 1.0, 0.0, 1.0 },
+            },
+        };
+
+        const positions = positions_per_direction[direction];
+
+        chunk_vertex_array[0] = Model.Vertex{ .position = positions[0] + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[0], .normal = normals[direction], .tangent = tangents[direction] };
+        chunk_vertex_array[1] = Model.Vertex{ .position = positions[1] + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[1], .normal = normals[direction], .tangent = tangents[direction] };
+        chunk_vertex_array[2] = Model.Vertex{ .position = positions[2] + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[3], .normal = normals[direction], .tangent = tangents[direction] };
+        chunk_vertex_array[3] = Model.Vertex{ .position = positions[3] + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[2], .normal = normals[direction], .tangent = tangents[direction] };
+
+        chunk_index_array[0] = 0 + self.chunk_vertex_count;
+        chunk_index_array[1] = 1 + self.chunk_vertex_count;
+        chunk_index_array[2] = 2 + self.chunk_vertex_count;
+        chunk_index_array[3] = 0 + self.chunk_vertex_count;
+        chunk_index_array[4] = 3 + self.chunk_vertex_count;
+        chunk_index_array[5] = 1 + self.chunk_vertex_count;
+
+        self.chunk_vertex_count += 4;
+        self.chunk_index_count += 6;
+    }
+
     pub fn meshSprite(self: *@This(), position: @Vector(3, u64), uv_offset: @Vector(2, f32)) void {
+        if (self.getBlock(position + @Vector(3, u64){ 1, 0, 0 }).isSolid() and
+            self.getBlock(position + @Vector(3, u64){ 0, 1, 0 }).isSolid() and
+            self.getBlock(position + @Vector(3, u64){ 0, 0, 1 }).isSolid() and
+            self.getBlock(position - @Vector(3, u64){ 1, 0, 0 }).isSolid() and
+            self.getBlock(position - @Vector(3, u64){ 0, 1, 0 }).isSolid() and
+            self.getBlock(position - @Vector(3, u64){ 0, 0, 1 }).isSolid()) return;
+        std.debug.print("bob", .{});
+
         const chunk_vertex_array: []Model.Vertex = @as([*]Model.Vertex, @ptrCast(@alignCast(self.chunk_vertex_buffer.mapped.?)))[self.chunk_vertex_count..CHUNK_VERTEX_BUFFER_COUNT];
         const chunk_index_array: []u32 = @as([*]u32, @ptrCast(@alignCast(self.chunk_index_buffer.mapped.?)))[self.chunk_index_count..CHUNK_INDEX_BUFFER_COUNT];
 
