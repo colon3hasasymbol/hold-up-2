@@ -499,8 +499,8 @@ pub const VoxelRenderer = struct {
         self.atlas.deinit();
     }
 
-    pub inline fn getBlock(self: @This(), position: @Vector(3, u64)) Block {
-        return self.chunk_data[position[0]][position[1]][position[2]];
+    pub inline fn getBlock(self: @This(), position: @Vector(3, i64)) Block {
+        return self.chunk_data[@intCast(position[0])][@intCast(position[1])][@intCast(position[2])];
     }
 
     // pub fn raycast(self: *const @This(), ray_start: @Vector(3, f32), ray_end: @Vector(3, f32)) @Vector(3, u64) {}
@@ -575,12 +575,12 @@ pub const VoxelRenderer = struct {
             },
         };
 
-        const positions = positions_per_direction[direction];
+        const positions = positions_per_direction[@intFromEnum(direction)];
 
-        chunk_vertex_array[0] = Model.Vertex{ .position = positions[0] + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[0], .normal = normals[direction], .tangent = tangents[direction] };
-        chunk_vertex_array[1] = Model.Vertex{ .position = positions[1] + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[1], .normal = normals[direction], .tangent = tangents[direction] };
-        chunk_vertex_array[2] = Model.Vertex{ .position = positions[2] + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[3], .normal = normals[direction], .tangent = tangents[direction] };
-        chunk_vertex_array[3] = Model.Vertex{ .position = positions[3] + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[2], .normal = normals[direction], .tangent = tangents[direction] };
+        chunk_vertex_array[0] = Model.Vertex{ .position = positions[0] + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[0], .normal = normals[@intFromEnum(direction)], .tangent = tangents[@intFromEnum(direction)] };
+        chunk_vertex_array[1] = Model.Vertex{ .position = positions[1] + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[1], .normal = normals[@intFromEnum(direction)], .tangent = tangents[@intFromEnum(direction)] };
+        chunk_vertex_array[2] = Model.Vertex{ .position = positions[2] + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[3], .normal = normals[@intFromEnum(direction)], .tangent = tangents[@intFromEnum(direction)] };
+        chunk_vertex_array[3] = Model.Vertex{ .position = positions[3] + @as(@Vector(3, f32), @floatFromInt(position)), .uv = quad_uvs[2], .normal = normals[@intFromEnum(direction)], .tangent = tangents[@intFromEnum(direction)] };
 
         chunk_index_array[0] = 0 + self.chunk_vertex_count;
         chunk_index_array[1] = 1 + self.chunk_vertex_count;
@@ -593,13 +593,13 @@ pub const VoxelRenderer = struct {
         self.chunk_index_count += 6;
     }
 
-    pub fn meshSprite(self: *@This(), position: @Vector(3, u64), uv_offset: @Vector(2, f32)) void {
-        if (self.getBlock(position + @Vector(3, u64){ 1, 0, 0 }).isSolid() and
-            self.getBlock(position + @Vector(3, u64){ 0, 1, 0 }).isSolid() and
-            self.getBlock(position + @Vector(3, u64){ 0, 0, 1 }).isSolid() and
-            self.getBlock(position - @Vector(3, u64){ 1, 0, 0 }).isSolid() and
-            self.getBlock(position - @Vector(3, u64){ 0, 1, 0 }).isSolid() and
-            self.getBlock(position - @Vector(3, u64){ 0, 0, 1 }).isSolid()) return;
+    pub fn meshSprite(self: *@This(), position: @Vector(3, i64), uv_offset: @Vector(2, f32)) void {
+        if (self.getBlock(position + @Vector(3, i64){ 1, 0, 0 }).isSolid() and
+            self.getBlock(position + @Vector(3, i64){ 0, 1, 0 }).isSolid() and
+            self.getBlock(position + @Vector(3, i64){ 0, 0, 1 }).isSolid() and
+            self.getBlock(position - @Vector(3, i64){ 1, 0, 0 }).isSolid() and
+            self.getBlock(position - @Vector(3, i64){ 0, 1, 0 }).isSolid() and
+            self.getBlock(position - @Vector(3, i64){ 0, 0, 1 }).isSolid()) return;
 
         const chunk_vertex_array: []Model.Vertex = @as([*]Model.Vertex, @ptrCast(@alignCast(self.chunk_vertex_buffer.mapped.?)))[self.chunk_vertex_count..CHUNK_VERTEX_BUFFER_COUNT];
         const chunk_index_array: []u32 = @as([*]u32, @ptrCast(@alignCast(self.chunk_index_buffer.mapped.?)))[self.chunk_index_count..CHUNK_INDEX_BUFFER_COUNT];
@@ -649,10 +649,14 @@ pub const VoxelRenderer = struct {
     }
 
     pub fn meshChunk(self: *@This()) void {
-        for (0..32) |x| {
-            for (0..32) |y| {
-                for (0..32) |z| {
-                    const block = self.chunk_data[x][y][z];
+        for (0..32) |ux| {
+            for (0..32) |uy| {
+                for (0..32) |uz| {
+                    const x: i64 = @intCast(ux);
+                    const y: i64 = @intCast(uy);
+                    const z: i64 = @intCast(uz);
+
+                    const block = self.chunk_data[ux][uy][uz];
 
                     switch (block.type) {
                         .air => {},

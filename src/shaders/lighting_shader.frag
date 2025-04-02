@@ -11,5 +11,5 @@ layout(location = 0) in vec2 frag_uv;
 layout(location = 0) out vec4 out_color;
 
 void main() {
-    out_color = texture(u_pos, frag_uv);
+    out_color = texture(u_col, frag_uv);
 }

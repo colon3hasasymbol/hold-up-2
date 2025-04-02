@@ -396,10 +396,16 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
     var voxel_renderer = try gx.VoxelRenderer.init(&logical_device, &pipeline1, &descriptor_pool, &command_pool, 1, allocator, null);
     defer voxel_renderer.deinit();
 
-    voxel_renderer.chunk_data[0][0][0] = .{ .type = .dirt };
-    voxel_renderer.chunk_data[1][1][1] = .{ .type = .dirt };
-    voxel_renderer.chunk_data[2][2][2] = .{ .type = .dirt };
-    voxel_renderer.chunk_data[3][3][3] = .{ .type = .grass };
+    // voxel_renderer.chunk_data[0][0][0] = .{ .type = .dirt };
+    for (1..8) |x| {
+        for (1..8) |y| {
+            for (1..8) |z| {
+                if (z % 2 == 0.0 or y % 2 == 0.0 or x % 2 == 0.0) {
+                    voxel_renderer.chunk_data[x][y][z] = .{ .type = .dirt };
+                }
+            }
+        }
+    }
 
     // voxel_renderer.meshCube(.{ 0, 0, 0 }, .{ 0.0, 0.0 });
     voxel_renderer.meshChunk();
