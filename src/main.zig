@@ -393,22 +393,26 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
 
     text_renderer.print(&characters);
 
-    var voxel_renderer = try gx.VoxelRenderer.init(&logical_device, &pipeline1, &descriptor_pool, &command_pool, 1, allocator, null);
+    var voxel_renderer = try gx.VoxelRenderer.init(&logical_device, &pipeline1, &descriptor_pool, &command_pool, 1, 2, allocator, null);
     defer voxel_renderer.deinit();
 
     // voxel_renderer.chunk_data[0][0][0] = .{ .type = .dirt };
-    for (1..8) |x| {
-        for (1..8) |y| {
-            for (1..8) |z| {
-                if (z % 2 == 0.0 or y % 2 == 0.0 or x % 2 == 0.0) {
-                    voxel_renderer.chunk_data[x][y][z] = .{ .type = .dirt };
-                }
-            }
-        }
-    }
+    // for (1..8) |x| {
+    //     for (1..8) |y| {
+    //         for (1..8) |z| {
+    //             if (z % 2 == 0.0 or y % 2 == 0.0 or x % 2 == 0.0) {
+    //                 voxel_renderer.chunk_data[x][y][z] = .{ .type = .dirt };
+    //             }
+    //         }
+    //     }
+    // }
+
+    // std.debug.print("{any}", .{voxel_renderer.chunk_map});
+
+    voxel_renderer.chunks[0].data[1][1][1] = .{ .type = .dirt };
 
     // voxel_renderer.meshCube(.{ 0, 0, 0 }, .{ 0.0, 0.0 });
-    voxel_renderer.meshChunk();
+    // voxel_renderer.meshChunk(0);
 
     var shape = px.BoundingBox.cube1x1();
     // shape.max[2] = 2.0;
@@ -613,7 +617,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
             }
         }
 
-        voxel_renderer.recordCommands(&command_buffer, &push_constant_data);
+        // voxel_renderer.recordCommands(&command_buffer, &push_constant_data);
 
         // swapchain.endRenderPass(&command_buffer);
 
