@@ -1526,6 +1526,69 @@ pub const DescriptorPool = struct {
     }
 };
 
+pub const DescriptorSet = struct {
+    pub const WriteInfo = union(WriteType) {
+        pub const WriteType = enum(u1) { image, buffer };
+        pub const BufferType = enum(u1) { storage, uniform };
+        image: struct { image: *const Image, sampler: *const Sampler },
+        buffer: struct { buffer: *const Buffer, range: @Vector(2, u64), type: BufferType },
+    };
+
+    handle: c.VkDescriptorSet,
+    device: *const LogicalDevice,
+
+    pub fn write(self: *@This(), write_infos: []WriteInfo, allocator: std.mem.Allocator) !void {
+        const infos = try allocator.alloc(union { image_info: c.VkDescriptorImageInfo, buffer_info: c.VkDescriptorBufferInfo }, write_infos.len);
+        defer allocator.free(infos);
+        const writes = try allocator.alloc(c.VkWriteDescriptorSet, write_infos.len);
+        defer allocator.free(writes);
+
+        for (write_infos, 0..) |write_info, i| {
+            switch (write_info) {
+                .image => {
+                    infos[i].image_info = c.VkDescriptorImageInfo{
+                        .sampler = write_info.image.sampler.handle,
+                        .imageView = write_info.image.image.view,
+                        .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                    };
+
+                    writes[i] = c.VkWriteDescriptorSet{
+                        .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                        .dstSet = self.handle,
+                        .dstBinding = @intCast(i),
+                        .dstArrayElement = 0,
+                        .descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                        .descriptorCount = 1,
+                        .pImageInfo = &infos[i].image_info,
+                    };
+                },
+                .buffer => {
+                    infos[i].buffer_info = c.VkDescriptorBufferInfo{
+                        .buffer = write_info.buffer.buffer.handle,
+                        .offset = write_info.buffer.range[0],
+                        .range = write_info.buffer.range[1],
+                    };
+
+                    writes[i] = c.VkWriteDescriptorSet{
+                        .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                        .dstSet = self.handle,
+                        .dstBinding = @intCast(i),
+                        .dstArrayElement = 0,
+                        .descriptorType = switch (write_info.buffer.type) {
+                            .storage => c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                            .uniform => c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                        },
+                        .descriptorCount = 1,
+                        .pBufferInfo = &infos[i].buffer_info,
+                    };
+                },
+            }
+        }
+
+        self.device.dispatch.UpdateDescriptorSets(self.device.handle, @intCast(writes.len), writes.ptr, 0, null);
+    }
+};
+
 pub const ShaderModule = struct {
     handle: c.VkShaderModule,
     device: *const LogicalDevice,
