@@ -157,7 +157,7 @@ pub const Window = struct {
             return error.SDLCreateWindow;
         }
 
-        if (c.SDL_SetWindowOpacity(handle, 0.2) < 0) return error.SDLSetWindowOpacity;
+        // if (c.SDL_SetWindowOpacity(handle, 0.2) < 0) return error.SDLSetWindowOpacity;
 
         return .{
             .handle = handle,
@@ -590,11 +590,8 @@ pub const LogicalDevice = struct {
             var props: c.VkFormatProperties = undefined;
             self.physical_device.instance.dispatch.GetPhysicalDeviceFormatProperties(self.physical_device.handle, format, &props);
 
-            if (tiling == c.VK_IMAGE_TILING_LINEAR and (props.linearTilingFeatures & features) == features) {
-                return format;
-            } else if (tiling == c.VK_IMAGE_TILING_OPTIMAL and (props.optimalTilingFeatures & features) == features) {
-                return format;
-            }
+            if (tiling == c.VK_IMAGE_TILING_LINEAR and (props.linearTilingFeatures & features) == features) return format;
+            if (tiling == c.VK_IMAGE_TILING_OPTIMAL and (props.optimalTilingFeatures & features) == features) return format;
         }
 
         return error.NoSupportedFormat;
@@ -1049,10 +1046,10 @@ pub const Swapchain = struct {
         const create_info = std.mem.zeroInit(c.VkSwapchainCreateInfoKHR, c.VkSwapchainCreateInfoKHR{
             .sType = c.VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
             .surface = surface.handle,
-            .presentMode = swapchain_support.present_modes[0],
+            .presentMode = present_mode,
             .preTransform = swapchain_support.capabilities.currentTransform,
-            .imageFormat = c.VK_FORMAT_B8G8R8A8_SRGB,
-            .imageColorSpace = c.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
+            .imageFormat = surface_format.format,
+            .imageColorSpace = surface_format.colorSpace,
             .clipped = c.VK_TRUE,
             .imageUsage = c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
             .compositeAlpha = c.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
