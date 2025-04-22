@@ -1316,7 +1316,7 @@ pub const Swapchain = struct {
         });
 
         _ = self.device.dispatch.ResetFences(self.device.handle, 1, &self.in_flight_fences[self.current_frame]);
-        _ = self.device.dispatch.QueueSubmit(self.device.graphics_queue, 1, &submit_info, self.in_flight_fences[self.current_frame]);
+        _ = self.device.dispatch.QueueSubmit(self.device.graphics_queue, 1, &submit_info, self.in_flight_fences[self.current_frame]); // yesssss i know this is dumb with the throwing away the result when i dont do that anywhere else but this is also just temporary also btw these comments are pretty fucking long dont you thnk maybe i should stop typing but im not going to cause its kinda funny or at least kinda funny to my weird ahh sense of humor also btw did you know i deserve to die for unnironically using "poggers" in the year of our lord 2025 bruh i am so cringe anyways this is starting to hurt my fingers maybe i should stop but im not going to because typing is fun tbh but now ive kinda fun out of things to say tbh so idk what to do maybe just keyboard spam but that wouldnt be fun to type so i really dont know what to do so im just gonna keep talking about how i dont know what to talk about haha nah thats not funny who am i kidding goodbye bitches cya! wow this is truly something very impressive way more impressive than this shitty project lol whoaaahhhh there cowboy i was bouta start keyboard spamming cause i ran out of shit to type uggh i really cant figure out what to type so im just gonna talk about how vulkan is kinda annoying tbh and opengl is fun but i will contimue to use vulkan because i am a masochist, did i spell masochist right? idk? does it matter? does life matter? does anything truly matter? YEP THATS RIGHT MOTHERFUCKERS WERE DOING PHILOSOPHY NOW HAHAHAEHHEHEHE so wait who was hecules? who is that guy? did he even matter either? ill never know because ill never know if he actually existed, as that one thing i read somewhere said everything could thereoectivl SHIT I CANT SPELL anyways eveyrthing could thereoecically (i give up) have been created last wednesday? im not sure which day it said it was just some random day, anyways what was i talking about, i forgor, hey wait why am i using "," so much, i OH SHIT I DID IT AGAIN I REALLY GOTTA STOP DOING THAT THERE ARE WAY TO MANY ","s in everything i write hey wait why did i just stop writing in caps whoops also my hands are getting seriously tired goodbye but also i really dont want to leave ARGHHHH what do i doooo i am perplexed hmmm i wonder what the etemology for perplexed is ???? oh crap i just did the space before "?" like from joe many liberals does it take to change a log by bolb ive become an idiot conservative lol welll my hands are like actually exhausted now goodye absolutely nobody
 
         const present_info = std.mem.zeroInit(c.VkPresentInfoKHR, c.VkPresentInfoKHR{
             .sType = c.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
@@ -1329,7 +1329,7 @@ pub const Swapchain = struct {
 
         if (self.device.dispatch.QueuePresentKHR(self.device.present_queue, &present_info) < 0) return error.VkQueuePresent;
 
-        self.current_frame = (self.current_frame + 1) % 2;
+        self.current_frame = (self.current_frame + 1) % 2; // huhhhhhh shouldnt this be modulod by a variable or something, i dont remember what i was thinking when i wrote this and it works so im not gonna change it, theres also a similar thing where i seemingly do something that limits the frames in flight to 2 and should segfault if there can only be 1
     }
 
     pub fn beginRenderPass(self: *@This(), command_buffer: *CommandBuffer, image_index: u32, clear_color: ClearColor) void {
@@ -1455,11 +1455,11 @@ pub const CommandBuffer = struct {
     device: *const LogicalDevice,
 
     pub fn begin(self: *@This()) !void {
-        const begin_info = std.mem.zeroInit(c.VkCommandBufferBeginInfo, c.VkCommandBufferBeginInfo{
+        const begin_info = std.mem.zeroInit(c.VkCommandBufferBeginInfo, c.VkCommandBufferBeginInfo{ // yes i know all these std.mem.zeroInit's are pointless cause the defaults of all vulkan structs are alreeady zeroes i wrote this before i knew that and im just too lazy to go through and change it cause it doesnt do anything bad besides maybe i teeny tiny bit more compile time
             .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         });
 
-        if (self.device.dispatch.BeginCommandBuffer(self.handle, &begin_info) < 0) return error.VkBeginCommandBuffer;
+        if (self.device.dispatch.BeginCommandBuffer(self.handle, &begin_info) < 0) return error.VkBeginCommandBuffer; // wait what why does this not need a device? tf?
     }
 
     pub fn end(self: *@This()) !void {

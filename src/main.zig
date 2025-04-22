@@ -554,6 +554,7 @@ pub fn conventional(allocator: std.mem.Allocator) !void {
         world_to_view = zmath.mul(world_to_view, zmath.mul(zmath.rotationY(camera_rotation[1]), zmath.rotationX(camera_rotation[0])));
 
         const view_to_clip = zmath.perspectiveFovRh(0.25 * std.math.pi, 1, 0.1, 200.0);
+        std.debug.print("{any}\n", .{view_to_clip});
 
         const world_to_clip = zmath.mul(world_to_view, view_to_clip);
 
